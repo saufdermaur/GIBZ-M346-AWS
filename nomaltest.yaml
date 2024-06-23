@@ -32,34 +32,29 @@ runcmd:
   - export PATH=/usr/local/bin/aws:$PATH
   - sudo chmod +x /var/log/credentials.sh
   - sudo /var/log/credentials.sh
-  # Ensure variables are exported directly for the current shell
-  - export MONGODB_USERNAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_USERNAME --query SecretString --output text | jq -r .MONGODB_USERNAME | tr -d '[:space:]')
-  - export MONGODB_CLUSTER=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_CLUSTER --query SecretString --output text | jq -r .MONGODB_CLUSTER | tr -d '[:space:]')
-  - export MONGODB_DATABASE_NAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_DATABASE_NAME --query SecretString --output text | jq -r .MONGODB_DATABASE_NAME | tr -d '[:space:]')
-  - export MONGODB_COLLECTION_NAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_COLLECTION_NAME --query SecretString --output text | jq -r .MONGODB_COLLECTION_NAME | tr -d '[:space:]')
-  - export MONGODB_PASSWORD=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_PASSWORD --query SecretString --output text | jq -r .MONGODB_PASSWORD | tr -d '[:space:]')
-  - export S3_BUCKET_NAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id S3_BUCKET_NAME --query SecretString --output text | jq -r .S3_BUCKET_NAME | tr -d '[:space:]')
-  # Write cron job with correctly substituted variables
-  - echo "* * * * * root mongosh \"mongodb+srv://$MONGODB_USERNAME:$MONGODB_PASSWORD@$MONGODB_CLUSTER.tfgnmjn.mongodb.net/$MONGODB_DATABASE_NAME?retryWrites=true&w=majority&appName=$MONGODB_COLLECTION_NAME\" --apiVersion 1 --username $MONGODB_USERNAME --password $MONGODB_PASSWORD --eval 'const metadata = db.$MONGODB_CLUSTER.find().toArray(); print(JSON.stringify(metadata));' > /var/www/html/metadata.json" | sudo tee /etc/cron.d/update_metadata
 
 write_files:
   - path: /var/log/credentials.sh
     permissions: '0755'
     content: |
       #!/bin/bash
+      # Fetch secrets from AWS Secrets Manager and export them as environment variables
       export MONGODB_USERNAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_USERNAME --query SecretString --output text | jq -r .MONGODB_USERNAME | tr -d '[:space:]')
       export MONGODB_CLUSTER=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_CLUSTER --query SecretString --output text | jq -r .MONGODB_CLUSTER | tr -d '[:space:]')
       export MONGODB_DATABASE_NAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_DATABASE_NAME --query SecretString --output text | jq -r .MONGODB_DATABASE_NAME | tr -d '[:space:]')
       export MONGODB_COLLECTION_NAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_COLLECTION_NAME --query SecretString --output text | jq -r .MONGODB_COLLECTION_NAME | tr -d '[:space:]')
       export MONGODB_PASSWORD=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_PASSWORD --query SecretString --output text | jq -r .MONGODB_PASSWORD | tr -d '[:space:]')
       export S3_BUCKET_NAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id S3_BUCKET_NAME --query SecretString --output text | jq -r .S3_BUCKET_NAME | tr -d '[:space:]')
+      export MONGODB_URI="mongodb+srv://$MONGODB_USERNAME:$MONGODB_PASSWORD@$MONGODB_CLUSTER.tfgnmjn.mongodb.net/$MONGODB_DATABASE_NAME?retryWrites=true&w=majority&appName=$MONGODB_COLLECTION_NAME"
 
+      # Persist the environment variables in /etc/profile for future sessions
       echo "export MONGODB_USERNAME=$MONGODB_USERNAME" >> /etc/profile
       echo "export MONGODB_CLUSTER=$MONGODB_CLUSTER" >> /etc/profile
       echo "export MONGODB_DATABASE_NAME=$MONGODB_DATABASE_NAME" >> /etc/profile
       echo "export MONGODB_COLLECTION_NAME=$MONGODB_COLLECTION_NAME" >> /etc/profile
       echo "export MONGODB_PASSWORD=$MONGODB_PASSWORD" >> /etc/profile
       echo "export S3_BUCKET_NAME=$S3_BUCKET_NAME" >> /etc/profile
+      echo "export MONGODB_URI=$MONGODB_URI" >> /etc/profile
 
       # Optional: Write these variables to a file for reference
       echo "$MONGODB_USERNAME" > /var/log/cred.txt
@@ -68,7 +63,27 @@ write_files:
       echo "$MONGODB_COLLECTION_NAME" >> /var/log/cred.txt
       echo "$MONGODB_PASSWORD" >> /var/log/cred.txt
       echo "$S3_BUCKET_NAME" >> /var/log/cred.txt
+      echo "$MONGODB_URI" >> /var/log/cred.txt
 
+      cat <<EOF | sudo tee /etc/cron.d/update_metadata
+      * * * * * root mongosh "mongodb+srv://$MONGODB_USERNAME:$MONGODB_PASSWORD@$MONGODB_CLUSTER.tfgnmjn.mongodb.net/$MONGODB_DATABASE_NAME?retryWrites=true&w=majority&appName=$MONGODB_COLLECTION_NAME" --apiVersion 1 --username "$MONGODB_USERNAME" --password "$MONGODB_PASSWORD" --eval 'const metadata = db["$MONGODB_COLLECTION_NAME"].find().toArray(); print(JSON.stringify(metadata));' > /var/www/html/metadata.json
+      EOF
+
+  - path: /etc/apache2/sites-available/my-site.conf
+    content: |
+      <VirtualHost *:80>
+          SetEnv MONGODB_USERNAME "${MONGODB_USERNAME}"
+          SetEnv MONGODB_CLUSTER "${MONGODB_CLUSTER}"
+          SetEnv MONGODB_DATABASE_NAME "${MONGODB_DATABASE_NAME}"
+          SetEnv MONGODB_COLLECTION_NAME "${MONGODB_COLLECTION_NAME}"
+          SetEnv MONGODB_PASSWORD "${MONGODB_PASSWORD}"
+          SetEnv S3_BUCKET_NAME "${S3_BUCKET_NAME}"
+          SetEnv MONGODB_URI "${MONGODB_URI}"
+      </VirtualHost>
+
+  - path: /etc/apache2/sites-enabled/000-default.conf
+    content: |
+      # Redirect permanent /info.php /info.php
 
   - path: /var/www/html/info.php
     content: |
@@ -88,6 +103,10 @@ write_files:
           $bucket_url = 'https://' . $_ENV['S3_BUCKET_NAME'] . '.s3.amazonaws.com/';
           if (!empty($metadata)) {
               foreach ($metadata as $item) {
+                  echo "<p>$_ENV['S3_BUCKET_NAME']</p>";
+                  echo "<p>ENV['S3_BUCKET_NAME']</p>"
+                  echo "<p>$S3_BUCKET_NAME</p>"
+                  echo "<p>$['S3_BUCKET_NAME']</p>"
                   echo "<p>{$bucket_url}{$item['id']}.jpg</p>";
                   echo "<img src='{$bucket_url}{$item['id']}.jpg' width='400' /><br/>";
                   echo '<p>Photo ID: ' . $item['id'] . '</p>';
@@ -106,6 +125,7 @@ write_files:
           ?>
       </body>
       </html>
+
   - path: /var/www/html/metadata.json
     content: |-
       []
