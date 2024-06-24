@@ -29,7 +29,18 @@ export const handler = async (event) => {
     const UNSPLASH_ACCESS_KEY_SECRET = await getSecret('UNSPLASH_ACCESS_KEY');
 
     const MONGODB_URI = `mongodb+srv://${MONGODB_USERNAME_SECRET}:${MONGODB_PASSWORD_SECRET}@${MONGODB_CLUSTER_SECRET}.tfgnmjn.mongodb.net/${MONGODB_DATABASE_NAME_SECRET}?retryWrites=true&w=majority&appName=${MONGODB_COLLECTION_NAME_SECRET}`;
-    
+
+
+    console.log(MONGODB_CLUSTER_SECRET);
+    console.log(MONGODB_PASSWORD_SECRET);
+    console.log(MONGODB_USERNAME_SECRET);
+    console.log(MONGODB_COLLECTION_NAME_SECRET);
+    console.log(MONGODB_DATABASE_NAME_SECRET);
+    console.log(S3_BUCKET_NAME_SECRET);
+    console.log(UNSPLASH_ACCESS_KEY_SECRET);
+    console.log(MONGODB_URI);
+
+
     /*
     const MONGODB_CLUSTER_SECRET = 'Cluster346';
     const MONGODB_PASSWORD_SECRET = 'AbQM462RELd1wFhx';

@@ -6,9 +6,7 @@ users:
     home: /home/ubuntu
     shell: /bin/bash
     ssh_authorized_keys:
-      # Herr Gisler
       - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC0WGP1EZykEtv5YGC9nMiPFW3U3DmZNzKFO5nEu6uozEHh4jLZzPNHSrfFTuQ2GnRDSt+XbOtTLdcj26+iPNiFoFha42aCIzYjt6V8Z+SQ9pzF4jPPzxwXfDdkEWylgoNnZ+4MG1lNFqa8aO7F62tX0Yj5khjC0Bs7Mb2cHLx1XZaxJV6qSaulDuBbLYe8QUZXkMc7wmob3PM0kflfolR3LE7LResIHWa4j4FL6r5cQmFlDU2BDPpKMFMGUfRSFiUtaWBNXFOWHQBC2+uKmuMPYP4vJC9sBgqMvPN/X2KyemqdMvdKXnCfrzadHuSSJYEzD64Cve5Zl9yVvY4AqyBD aws-key
-      # Privat
       - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCK45plqXW1CWEgOx8d9nGWA9MrsC+E4YRAKMt1k4LCFvbm7fXqxvCVwhFjGSaSZwrIKZ+DMFF6oLipR6jx52CRn6qcjkncLM8oorrJUKs/BM4FXToqzDRKF9kI106qTUUCZThDk/Ktr1Tqd40PVkPmGP1xs1WjkmIOdQRAPgTSDJsY8Dfv8ndiF3IGezPaXKtKrFHVW2gXFbGPkuywaCrKjV6udVx9JGCf4mOQcHCEL3M7E2aAivPdC2LwV8fhTEjzPwUQUf4ClHNhqIGvdWEgEbI9ct4RIUkKWn9Y15hwOwJz5J/VTHdj836n+n/5Tgi9UK1s0DVIycYC1qew4RcR aws-key
 ssh_pwauth: true
 disable_root: false
@@ -21,6 +19,8 @@ packages:
   - php
   - libapache2-mod-php
   - cron
+  - awscli
+  - jq
 
 runcmd:
   - wget -qO - https://www.mongodb.org/static/pgp/server-6.0.asc | sudo apt-key add -
@@ -29,9 +29,37 @@ runcmd:
   - sudo apt-get install -y mongodb-mongosh
   - sudo systemctl enable apache2
   - sudo systemctl start apache2
-  - echo "* * * * * root mongosh \"mongodb+srv://saufdermaur:AbQM462RELd1wFhx@cluster346.tfgnmjn.mongodb.net/testPraktischePruefungDB?retryWrites=true&w=majority&appName=Cluster346\" --apiVersion 1 --username saufdermaur --password AbQM462RELd1wFhx --eval 'const metadata = db.Cluster346.find().toArray(); print(JSON.stringify(metadata));' > /var/www/html/metadata.json" | sudo tee /etc/cron.d/update_metadata
+  - export PATH=/usr/local/bin/aws:$PATH
+  - sudo chmod +x /var/log/credentials.sh
+  - sudo /var/log/credentials.sh
 
 write_files:
+  - path: /var/log/credentials.sh
+    permissions: '0755'
+    content: |
+      #!/bin/bash
+      # Fetch secrets from AWS Secrets Manager and export them as environment variables
+      export MONGODB_USERNAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_USERNAME --query SecretString --output text | jq -r .MONGODB_USERNAME | tr -d '[:space:]')
+      export MONGODB_CLUSTER=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_CLUSTER --query SecretString --output text | jq -r .MONGODB_CLUSTER | tr -d '[:space:]')
+      export MONGODB_DATABASE_NAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_DATABASE_NAME --query SecretString --output text | jq -r .MONGODB_DATABASE_NAME | tr -d '[:space:]')
+      export MONGODB_COLLECTION_NAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_COLLECTION_NAME --query SecretString --output text | jq -r .MONGODB_COLLECTION_NAME | tr -d '[:space:]')
+      export MONGODB_PASSWORD=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id MONGODB_PASSWORD --query SecretString --output text | jq -r .MONGODB_PASSWORD | tr -d '[:space:]')
+      export S3_BUCKET_NAME=$(aws secretsmanager get-secret-value --region us-east-1 --secret-id S3_BUCKET_NAME --query SecretString --output text | jq -r .S3_BUCKET_NAME | tr -d '[:space:]')
+      export MONGODB_URI="mongodb+srv://$MONGODB_USERNAME:$MONGODB_PASSWORD@$MONGODB_CLUSTER.tfgnmjn.mongodb.net/$MONGODB_DATABASE_NAME?retryWrites=true&w=majority&appName=$MONGODB_COLLECTION_NAME"
+
+      # Persist the environment variables in /etc/profile for future sessions
+      echo "export MONGODB_USERNAME=$MONGODB_USERNAME" >> /etc/profile
+      echo "export MONGODB_CLUSTER=$MONGODB_CLUSTER" >> /etc/profile
+      echo "export MONGODB_DATABASE_NAME=$MONGODB_DATABASE_NAME" >> /etc/profile
+      echo "export MONGODB_COLLECTION_NAME=$MONGODB_COLLECTION_NAME" >> /etc/profile
+      echo "export MONGODB_PASSWORD=$MONGODB_PASSWORD" >> /etc/profile
+      echo "export S3_BUCKET_NAME=$S3_BUCKET_NAME" >> /etc/profile
+      echo "export MONGODB_URI=$MONGODB_URI" >> /etc/profile
+
+      cat <<EOF | sudo tee /etc/cron.d/update_metadata
+      * * * * * root mongosh "mongodb+srv://$MONGODB_USERNAME:$MONGODB_PASSWORD@$MONGODB_CLUSTER.tfgnmjn.mongodb.net/$MONGODB_DATABASE_NAME?retryWrites=true&w=majority&appName=$MONGODB_COLLECTION_NAME" --apiVersion 1 --username "$MONGODB_USERNAME" --password "$MONGODB_PASSWORD" --eval 'const metadata = db["$MONGODB_COLLECTION_NAME"].find().toArray(); print(JSON.stringify(metadata));' > /var/www/html/metadata.json
+      EOF
+
   - path: /var/www/html/info.php
     content: |
       <!DOCTYPE html>
@@ -47,11 +75,9 @@ write_files:
           $metadata = null;
           $json_data = file_get_contents('/var/www/html/metadata.json');
           $metadata = json_decode($json_data, true);
-          $bucket_url = 'https://testpraktischepruefungbucket.s3.amazonaws.com/';
-
+          $bucket_url = 'https://praktischepruefungbucket.s3.amazonaws.com/';
           if (!empty($metadata)) {
               foreach ($metadata as $item) {
-                  echo "<p>{$bucket_url}{$item['id']}.jpg</p>";
                   echo "<img src='{$bucket_url}{$item['id']}.jpg' width='400' /><br/>";
                   echo '<p>Photo ID: ' . $item['id'] . '</p>';
                   echo '<p>Description: ' . $item['description'] . '</p>';
@@ -69,6 +95,7 @@ write_files:
           ?>
       </body>
       </html>
+
   - path: /var/www/html/metadata.json
     content: |-
       []
