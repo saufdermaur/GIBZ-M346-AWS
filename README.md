@@ -30,7 +30,7 @@ Schliesslich sieht der Benutzer alle zwei Minuten ein neues Bild mit deren Metad
 3. lambda layer erstellen (beinhaltet axios, mongodb => dependencies für lambda)
 4. lambda funktion erstellen (node 20.x)
 5. ec2 webserver erstellen und dynamisch inhalt von s3 und mongodb laden
-6. cloud watch trigger alle 2 minuten
+6. EventBridge trigger alle 2 minuten
 7. load balancer
 8. hosted zone (subdomain)  
 
@@ -44,17 +44,22 @@ Damit die Secrets auch von EC2 oder Lambda ausgelesen werden können, müssen en
 
 ```JSON
 {
-    "Version": "2012-10-17",
-    "Statement": [
-        {
-            "Effect": "Allow",
-            "Principal": {
-                "AWS": "arn:aws:iam::561824754533:role/LabRole"
-            },
-            "Action": "secretsmanager:GetSecretValue",
-            "Resource": "*"
-        }
-    ]
+  "Version" : "2012-10-17",
+  "Statement" : [ {
+    "Effect" : "Allow",
+    "Principal" : {
+      "AWS" : "arn:aws:iam::561824754533:role/LabRole"
+    },
+    "Action" : "secretsmanager:GetSecretValue",
+    "Resource" : "*"
+  }, {
+    "Effect" : "Allow",
+    "Principal" : {
+      "AWS" : "arn:aws:iam::561824754533:role/EMR_EC2_DefaultRole"
+    },
+    "Action" : "secretsmanager:GetSecretValue",
+    "Resource" : "*"
+  } ]
 }
 ```
 
@@ -74,14 +79,36 @@ S3_BUCKET_NAME
 UNSPLASH_ACCESS_KEY
 ```
 
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/SecretMan_config_bucket.png" alt="Configuration for the S3 Bucket in AWS Secrets Manager" width="500">
+        <figcaption>Konfiguration des Secrets für den S3 Bucket</figcaption>
+    </figure>
+</div>
+
+
 ## Mongodb 
 
 Bei der MongoDB gibt es nicht viel zu beachten. Nebst einer leeren Instanz musste nur noch der `Network access` konfiguriert werden. Bei dem wurde eingestellt, dass alle IP-Adressen zugriff auf die DB besitzten. Natürlich werden immernoch Anmeldeinformationen verlangt, doch wird die Firewall somit etwas entschärft. Der Grund dafür ist, dass die Services welche die MongoDB benötigen, einer öffentlichen IP zugewiesen sind. Diese kann sich immer wieder ändern (wenn nicht expliziert definiert) was dazu führen würde, dass bei jeder IP änderung der Netowrk access auf die neue IP angepasst werden müsste. Dies wird mit dem setzen von der IP-range `0.0.0.0/0` umgangen, birgt aber ein höheres Sicherheitsrisiko. Da es sich hierbei um keine produktive Umgebung handelt, ist dies also kein Problem.
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/MongoDB_summary.png" alt="Created MongoDB" width="500">
+        <figcaption>MongoDB für die praktische Prüfung</figcaption>
+    </figure>
+</div>
 
 ## S3 Bucket
 
 Der Bucket muss so konfiguriert werden, dass er erlaubt, Bilder im Internet öffentlich zu machen. Entweder kann man Global festlegen, dass jedes Bild publiziert wird oder man entscheidet sich jeweils genau, welches öffentlich gemacht werden soll. Ich habe mich für letzteres entschieden, um mehr Kontrolle über die Inhalte zu haben. Ich möchte z.B. nicht ein persönliches Bild hochladen und dieses automatisch online haben...
 Damit dies bewerkstelligt werden konnte, mussten die ACLs aktiviert werden und `Block all public access` abgewählt werden. Diese Einstellungen erlauben, dass Berechtigungen einzeln auf den jeweiligen Bildern gesetzt werden können. In unserem Fall ein Bild also öffentlich zu machen. Desweiteren wird so erlaubt, dass wir über die Lambdafunktion die Berechtigungen auf ein Bild überhaupt setzten können. 
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/S3_config.png" alt="Configuration of the S3 Bucket" width="500">
+        <figcaption>Einstellungen des S3 Buckets</figcaption>
+    </figure>
+</div>
 
 ## Lambda  
 
@@ -108,6 +135,13 @@ Die Einbindung erfolgt wie folgt:
 3. Ein neues Layer erstellen (create layer)
 4. Dieses Konfigurieren indem die Laufzeit angegeben wird und das Zip hochgeladen wird.
 
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/LambdaLayer_create.png" alt="Creation of the Lambda Layer" width="500">
+        <figcaption>Konfiguration des Lambda Layers</figcaption>
+    </figure>
+</div>
+
 ### Lambda Function
 
 Erstellen der Lambda Funktion:
@@ -118,17 +152,52 @@ Erstellen der Lambda Funktion:
 4. `Nodejs 20.x` als Umgebung auswählen
 5. `Change default execution role` die LabRole auswählen. 
 
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/LambdaFunction_create.png" alt="Creation of Lambdafunction" width="500">
+        <figcaption>Einstellungen der Lambdafunktion</figcaption>
+    </figure>
+</div>
+
 Das auswählen der execution role umfasst zwei Gründe; erstens kann die Funktion nur erstellt werden, wenn eine Rolle angegeben wird, welche Berechtigung hat, auf Cloud Watch (logging service) zu schreiben. Zweitens greifen wir in der Funktion auf den API-Dienst von MongoDB zu. Dafür werden Credentials benötigt welche im Secrets Manager definiert sind. Damit diese ausgelesen werden können, haben wir bei den jeweiligen Secrets im SecretsManager angegeben welche Rollen auf die Ressourcen Zugriff haben. Da dies die LabRole ist, wird diese selektiert. 
 
 Da die benötigten Dependencies nun vorhanden sind, wird die Lambda-Funktion erstellt, welche das Bild von Unsplash in den S3 Bucket herunterlädt und die Metadaten in MongoDB speichert.
 
 Unter `Layers` wird der vorherig erstellte Layer hinzugefügt. Hierbei wird das Layer anhand des ARN (eindeutige ID) ausgewählt, dieser findet sich bei der Detailansicht des Lambda Layers. 
 
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/LambdaFunction_addLayer.png" alt="Add Layer to Function" width="500">
+        <figcaption>Konfiguration, um Layer an der Funktion anzubinden</figcaption>
+    </figure>
+</div>
+
 Der [Code]() wird anschliessend in das `index.mjs` geschrieben und muss mit dem Button `Deploy` gespeichert werden. 
 
 Zu beachte gilt noch, dass die Timeout Dauer erhöht wird. Durch das Fetchen von Unsplash und den sonstigen Operaionen kann es sein, dass die Lambdafunktion länger als drei Sekunden daurt und in einem Timeout endet. Dies kann über Configruation => General configuration angepasst werden. Ich verwende 30s.
 
 Bevor fortgefahren wird mit der EC2 Instanz welche den Webserver zur Verfügung stellt, wird ein Test durchgeführt welcher mit dem gleinchamigen Button ausgeführt werden kann. Der Test Event reicht mit der Standardkonfiguration aus und benötigt nur einen Namen. Ein erfolgreicher Test gibt einen HTTP Code 200. Zudem haben wir ein öffentlich einsehbares Bild im Bucket und auf MongoDB den MetadatenEintrag gemäss Anforderungen.
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/LambdaFunction_testSuccess.png" alt="Test success" width="500">
+        <figcaption>Antwort des Tests i.O.</figcaption>
+    </figure>
+</div>
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/MongoDB_testMetadata.png.png" alt="Stored metadata in MongoDB" width="500">
+        <figcaption>Erster Eintrag von Metadaten in der MongoDB</figcaption>
+    </figure>
+</div>
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/S3_publiTestImage.png" alt="Public available Image" width="500">
+        <figcaption>Öffentliches Bild im S3 Bucket</figcaption>
+    </figure>
+</div>
 
 ## EC2 Webserver
 
@@ -154,4 +223,132 @@ Bei der Konfiguration der EC2 Instanz hatte ich am meisten Probleme. Grund dafü
 3. Script ausführen welches Secrets aus SecretsManger liest und im gleichen Script den API Call mit den Variablen macht, Script als Cronjob
 4. Script ausführen welches Secrets aus SecretsManger liest und im gleichen Script den API Call mit den Variablen macht
 
-Hierbei hat einzig und allein die Letzte und meines Erachtens schlechteste Methode funktioniert. So wie es jetzt implementiert ist, wird das `Credentials.sh` skript beim erstellen der EC2 Instanz aufgerufen welches die Secrets aus dem Secrets Manager holt und diese als ENV auf dem System speichert. Im gleichen Atemzug wird der API Call initialsiert welcher jede Minute (nicht alle zwei um immer auf dem Stand des S3 Buckets/MongoDB zu sein) die Metadaten aus der MongoDB holt und diese in einer Datei ablegt. Hier sind schon die ersten Probleme; werden die Secrets geändert, werden diese nicht automatisch übernommen. Es geschieht kein neuer Abruf der Variablen. Des weiteren 
+Hierbei hat einzig und allein die Letzte und meines Erachtens schlechteste Methode funktioniert. So wie es jetzt implementiert ist, wird das `Credentials.sh` skript beim erstellen der EC2 Instanz aufgerufen welches die Secrets aus dem Secrets Manager holt und diese als ENV auf dem System speichert. Im gleichen Atemzug wird der API Call initialsiert welcher jede Minute (nicht alle zwei um immer auf dem Stand des S3 Buckets/MongoDB zu sein) die Metadaten aus der MongoDB holt und diese in einer Datei ablegt. Hier sind schon das erste Problem; werden die Secrets geändert, werden diese nicht automatisch übernommen. Es geschieht kein neuer Abruf der Variablen. Bis hierhin geht es nur um das holen und speichern der Metadaten. Angezeigt werden diese durch das PHP Skript. Aus dem S3 Bucket wird das Bild geholt und aus dem Metadatenfile werden die enstprechenden Bildinformationen geholt. Der Connectionstring für den S3 Bucket muss ich hierbei hardcodieren da ich keine Möglichkeit gefunden habe auf den Secret Manager oder den ENV Variablen zuzugreifen. Damit die aktualisierten Daten angezeigt werden, wird die Seite jede Minute neu geladen. 
+
+Somit funktioniert dieses Cloud-Init Skript doch ist es bestimmt nicht produktiv einsetzbar. Vor allem die Credentials sind hier die grösste Hürde. Diese müssen stets aktuell und sicher aufbewart werden. Nichtsdestotrotz war es möglich die Credentials aus dem Secrets Manager auszulesen und zu verwenden. 
+
+## Automatisieren mit Event Bridge
+
+Da der Webserver nun funktioniert. Möchten wir, dass alle zwei Minuten ein Bild von Unsplash heruntergeladen und verarbeitet wird. Dies kann sehr einfach mit EventBridge umgesetzt werden.
+
+1. Amazon EventBridge
+2. Schedules
+3. Create schedule
+4. Unter schedule pattern wird mit der Cron expression `*/2 * * * * ? *` angegeben, dass es alle zwei Minuten laufen soll.
+5. Target detail: AWS Lambda
+6. Funktion auswählen
+7. Action after schedule completion: NONE (Der Vorgang soll immer weiter laufen...)
+8. Permissions: LabRole 
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/EB_Scheduler.png" alt="EventBridge Cron Job" width="500">
+        <figcaption>Die nächsten Ausführzeiten des Events</figcaption>
+    </figure>
+</div>
+
+## Load Balancer und AutoScaling
+
+Mit der anhin umgesetzten Applikation werden alle zwei Minuten Bilder aus Unsplash heruntergeladen und mit den jeweiligen Metadaten auf der Homepage angezeigt. In diesem Abschnitt wird ein Load Balancer und ein AutoScaling Service erstellt. Diese Kombination erlaubt es, stets eine gewünschte Anzahl von EC2 Instanzen am laufen zu haben und die Last auf diese gleichmässig zu verteilene. Darüber hinaus, werden die Instanzen in jeweils verschiedenen Availability Zones laufen, was die Redundanz erhöht. 
+
+
+Folgender Ablauf wird nicht in grossem Detail dokumentiert, da dies auf der Aufgabe 06: Scaling basiert und dort detaillierter niedergeschrieben ist. Trotzdem wie folgt der Ablauf:
+
+1. Target Group erstellen
+    1. EC2
+    2. Target Groups
+    3. Create target group
+    4. Instances
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/TG_ForLoadBalancer.png" alt="Configuration for Target Group" width="500">
+        <figcaption>Einstellungen der Target Group</figcaption>
+    </figure>
+</div>
+
+2. Load Balancer konfigurieren
+    1. EC2
+    2. Load Balancer
+    3. Application
+    4. Availability Zones
+    5. Security Groups
+    6. Target Groups
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/LB_AvailabilityZones.png" alt="Configuration for Availability Zones" width="500">
+        <figcaption>Die selektierten Availability Zones für mehr Redundanz</figcaption>
+    </figure>
+</div>
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/LB_Summary.png" alt="Summary of Load Balancer" width="500">
+        <figcaption>Zusammenfassung des Load Balancers</figcaption>
+    </figure>
+</div>
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/LB_WebserverAvailable.png" alt="Webserver through Load Balancer" width="500">
+        <figcaption>Erreichbar: Der Webserver via Load Balancer</figcaption>
+    </figure>
+</div>
+
+Bis zu diesem Zeitpunkt haben wir einen LoadBalancer mit einer öffentlich erreichbaren URI, doch zeigt diese auf immer die gleiche Instanz. Dies wollen wir nun ändern. 
+
+3. Launch Template erstellen
+    1. EC2
+    2. Launch Templates
+    3. Analog konfigurieren wie die EC2 Instanz 
+4. Auto scaling service definieren
+    1. EC2
+    2. Auto Scaling Groups
+    3. Launch template auswählen
+    4. Availability Zones auswählen (gleiche wie Load Balancer)
+    5. Attach to an existing load balancer
+    6. Target group auswählen
+    7. Turn on Elastic Load Balancing health checks
+    8. Min 2 Instanzen
+
+Sind die Instanzen "Healthy" kann über die URI des Load Balancers immernoch auf die Seite zugegriffen werden. Jetzt haben wir allerdings eine gewisse Redundanz, denn drei Instanzen (2 von Auto Scaler, 1 manuell erstellte) laufen zurzeit. Mit zwei Instanzen (die vom auto scaler) kann man immer rechnen, ausser AWS hat einen weiten Systemausfall was aber sehr unwahrscheinlich ist.
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/TG_RunningInstances.png" alt="Healthy Instances" width="500">
+        <figcaption>Drei gesunde Instanzen</figcaption>
+    </figure>
+</div>
+
+
+## Hosted Zone 
+
+Der DNS Name um den Webserver nun zu erreichen ist folgender: `praktischePruefungLB-121437075.us-east-1.elb.amazonaws.com` dies ist eine unschöne URI und soll nun durch die Subdomain `sebastian.m346.ch` "ersetzt" werden. 
+
+Dafür muss zuerst eine Hosted Zone erstellt werden.
+
+1. Route 53
+2. Create hosted zone
+3. domain angeben `m346.ch`
+4. create record
+5. subdomain angeben `sebastian.m346.ch`
+6. CNAME da der load balancer keine öffentliche IP hat. Würde eine EC2 Instanz gewählt werden, welche eine öffentliche IP besitzt, wäre es möglich einen A-Record zu nehmen und auf die IP zu zeigen. 
+7. Dem Adminsistrator der Domain muss der Nameserver (NS) welcher auf der Route 53 Oberfläche ersichtlich ist, mitgeteilt werden. Daraufhin delegiert der Adminstrator alle Verbindung auf die Subdomain auf unsere Hosted Zone,sodass wir diese weiter verwenden können. 
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/HZ_create_zone.png" alt="Configuration of Hosted Zone" width="500">
+        <figcaption>Konfiguration der Hosted Zone</figcaption>
+    </figure>
+</div>
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/HZ_CreateRecord.png" alt="Creating the Subdomain in the Hosted Zone" width="500">
+        <figcaption>Hinzufügen der Subdomain in der Hosted Zone</figcaption>
+    </figure>
+</div>
+
+# Reflexion und Abschluss
+
