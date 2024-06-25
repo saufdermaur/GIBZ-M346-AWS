@@ -145,3 +145,13 @@ Konfiguriert wurde folgendes
 Ubuntu 22 wird verwendet, da einige Dependencies nicht auf dem neues Ubuntu 24 funktionieren. Ein neues Schlüsselpaar wurde definiert, um die praktische Prüfung von den anderen Aufgaben zu trennen. Weiter wurde eine neue `Security Group` erstellt, welche als Outbound-Rule alles zulässt (0.0.0.0/0) und als Inbound-Rule SSH Port 22, HTTP Port 80 und HTTPS Port 443. Wir verwenden zwar kein HTTPS da wir kein SSL-Zertifikat besitzten, doch trifft man beim Zugriff auf die Webseite schneller auf den geschlossenen Port als wenn man auf den Timeout wartet...
 Sehr wichtig ist, wie bereits bei der Lambdafunktion definiert, dass auswählen einer Rolle, welche den Zugriff auf den Secrets Manager hat. Diese wurde ebenfalls im SecretsManger bei den jeweiligen Secrets angegeben und muss nun selektiert werden. Die EC2 Instanz läuft anschliessend mit dieser Rolle und erlaubt das auslesen der Schlüsselpaare. 
 
+Der Webserver läuft nachher mithile von Apache und zeigt mithilfe eines PHP Scripts fortlaufend die neuen Inhalte von der MongoDB mit den jeweiligen Bildern an. 
+
+Bei der Konfiguration der EC2 Instanz hatte ich am meisten Probleme. Grund dafür war das mühsame auslesen der Secrets aus dem Secrets Manager. Folgende Varianten habe ich ausprobiert:
+
+1. Aus dem MongoAPI Call die Credentials vom Secrets Manager auslesen und so Anfrage senden => Garantiert immer aktuelle Secrets, wird alle zwei Minuten per Cron Job aufgerufen
+2. Secrets per Cron Job aufrufen und als ENV speichern. MongoAPI Call greift diese ENV zu und ruft als CronJob alle zwei Minuten API ab
+3. Script ausführen welches Secrets aus SecretsManger liest und im gleichen Script den API Call mit den Variablen macht, Script als Cronjob
+4. Script ausführen welches Secrets aus SecretsManger liest und im gleichen Script den API Call mit den Variablen macht
+
+Hierbei hat einzig und allein die Letzte und meines Erachtens schlechteste Methode funktioniert. So wie es jetzt implementiert ist, wird das `Credentials.sh` skript beim erstellen der EC2 Instanz aufgerufen welches die Secrets aus dem Secrets Manager holt und diese als ENV auf dem System speichert. Im gleichen Atemzug wird der API Call initialsiert welcher jede Minute (nicht alle zwei um immer auf dem Stand des S3 Buckets/MongoDB zu sein) die Metadaten aus der MongoDB holt und diese in einer Datei ablegt. Hier sind schon die ersten Probleme; werden die Secrets geändert, werden diese nicht automatisch übernommen. Es geschieht kein neuer Abruf der Variablen. Des weiteren 
