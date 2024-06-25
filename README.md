@@ -81,6 +81,7 @@ Bei der MongoDB gibt es nicht viel zu beachten. Nebst einer leeren Instanz musst
 ## S3 Bucket
 
 Der Bucket muss so konfiguriert werden, dass er erlaubt, Bilder im Internet öffentlich zu machen. Entweder kann man Global festlegen, dass jedes Bild publiziert wird oder man entscheidet sich jeweils genau, welches öffentlich gemacht werden soll. Ich habe mich für letzteres entschieden, um mehr Kontrolle über die Inhalte zu haben. Ich möchte z.B. nicht ein persönliches Bild hochladen und dieses automatisch online haben...
+Damit dies bewerkstelligt werden konnte, mussten die ACLs aktiviert werden und `Block all public access` abgewählt werden. Diese Einstellungen erlauben, dass Berechtigungen einzeln auf den jeweiligen Bildern gesetzt werden können. In unserem Fall ein Bild also öffentlich zu machen. Desweiteren wird so erlaubt, dass wir über die Lambdafunktion die Berechtigungen auf ein Bild überhaupt setzten können. 
 
 ## Lambda  
 
@@ -88,38 +89,59 @@ Ist die MongoDB erstellt, deren Credentials im Secrets Manager eingetragen und d
 
 Die folgende Lambda-Funktion basiert auf Node.js 20.x. Damit diese mit der Unsplash-API und MongoDB-API arbeiten kann, benötigt sie dependencies. Diese sind nicht direkt in der Laufzeitumgegbund integriert und müssen somit manuell hinzugefügt werden. Dies kann aber mithilfe einiger Online-Ressourcen relativ einfach implementiert werden. Dafür benötigt man ein sogenanntes Lambda-Layer.
 
-Während dem bearbeiten der Aufgabe habe ich mir überlegt, ob es nicht sinnvoller gewesen wäre, eine andere Entwicklungsumgebung wie bspws. C# oder Python zu verwenden, da dort womöglich die benötigten Libraries/Dependencies bereits beinhaltet werden. Allerdings wird in [diesem](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html) Artikel erwähnt, dass der Benutzer selbst zu den benötigten Abhängigkeiten schauen muss. Welche aber bereits von Lambda selbst integriert sind, habe ich leider nicht gefunden. Somit spielt es meines Wisssens nach keine Rolle, welche Umgebung verwedent wird da überall Dependencies/Libraries als Layer hinzugefügt werden müssen. 
+Während dem bearbeiten der Aufgabe habe ich mir überlegt, ob es nicht sinnvoller gewesen wäre, eine andere Entwicklungsumgebung wie bspws. C# oder Python zu verwenden, da dort womöglich die benötigten Libraries/Dependencies bereits beinhaltet werden. Allerdings wird in [diesem](https://docs.aws.amazon.com/lambda/latest/dg/lambda-runtimes.html) Artikel erwähnt, dass der Benutzer selbst zu den benötigten Abhängigkeiten schauen muss. Welche aber bereits von Lambda selbst integriert sind, habe ich leider nicht gefunden. Somit spielt es meines Erachtens keine Rolle, welche Umgebung verwedent wird, da überall Dependencies/Libraries als Layer hinzugefügt werden müssen. 
 
 ### Lambda Layer
 
-Das Lambda Layer stellt der zugehörigen Lambda-Funktion benötigte Dependencies bereit. 
+Das Lambda Layer stellt der zugehörigen Lambda-Funktion benötigte Dependencies bereit. Damit die Dependencies auf AWS hochgeladen werden können, müssen diese zuerst auf dem lokalen Rechner heruntergeladen und gezippt werden.
 
-1. lokalen order erstellen
-2. im ordner Befehle `npm init -y`, `npm install axios mongodb` ausführen
-3. lokalen ordner zu .zip machen
+1. Lokalen order erstellen
+2. Im Ordner Befehle `npm init -y`, `npm install axios mongodb` ausführen
+3. Lokalen Ordner zu .zip machen
 
-lambda => layers => create layer => Konfigurieren, Create
+Somit haben wir die Dependencies/Libraries in einem zip-Format, welches von Lambda gelesen werden kannn.
+
+Die Einbindung erfolgt wie folgt:
+
+1. Auf die Lambda-Seite navigieren
+2. `Layers` auswählen
+3. Ein neues Layer erstellen (create layer)
+4. Dieses Konfigurieren indem die Laufzeit angegeben wird und das Zip hochgeladen wird.
 
 ### Lambda Function
 
+Erstellen der Lambda Funktion:
+
+1. Lambda Seite navigieren
+2. `Functions` reiter anwhälen
+3. Create function 
+4. `Nodejs 20.x` als Umgebung auswählen
+5. `Change default execution role` die LabRole auswählen. 
+
+Das auswählen der execution role umfasst zwei Gründe; erstens kann die Funktion nur erstellt werden, wenn eine Rolle angegeben wird, welche Berechtigung hat, auf Cloud Watch (logging service) zu schreiben. Zweitens greifen wir in der Funktion auf den API-Dienst von MongoDB zu. Dafür werden Credentials benötigt welche im Secrets Manager definiert sind. Damit diese ausgelesen werden können, haben wir bei den jeweiligen Secrets im SecretsManager angegeben welche Rollen auf die Ressourcen Zugriff haben. Da dies die LabRole ist, wird diese selektiert. 
+
 Da die benötigten Dependencies nun vorhanden sind, wird die Lambda-Funktion erstellt, welche das Bild von Unsplash in den S3 Bucket herunterlädt und die Metadaten in MongoDB speichert.
 
-Unter `Layers` wird der vorherig erstellte Layer hinzugefügt. Hierbei wird das Layer anhand des ARN ausgewählt, dieser findet sich bei der Detailansicht des Lambda Layers. 
+Unter `Layers` wird der vorherig erstellte Layer hinzugefügt. Hierbei wird das Layer anhand des ARN (eindeutige ID) ausgewählt, dieser findet sich bei der Detailansicht des Lambda Layers. 
 
 Der [Code]() wird anschliessend in das `index.mjs` geschrieben und muss mit dem Button `Deploy` gespeichert werden. 
-
 
 Zu beachte gilt noch, dass die Timeout Dauer erhöht wird. Durch das Fetchen von Unsplash und den sonstigen Operaionen kann es sein, dass die Lambdafunktion länger als drei Sekunden daurt und in einem Timeout endet. Dies kann über Configruation => General configuration angepasst werden. Ich verwende 30s.
 
 Bevor fortgefahren wird mit der EC2 Instanz welche den Webserver zur Verfügung stellt, wird ein Test durchgeführt welcher mit dem gleinchamigen Button ausgeführt werden kann. Der Test Event reicht mit der Standardkonfiguration aus und benötigt nur einen Namen. Ein erfolgreicher Test gibt einen HTTP Code 200. Zudem haben wir ein öffentlich einsehbares Bild im Bucket und auf MongoDB den MetadatenEintrag gemäss Anforderungen.
 
-Lambda => Functions => Create function
-
 ## EC2 Webserver
 
 Für das erstellen der Instanz wird eine [Cloud-Init]() Datei verwendet. 
 
-Ubuntu 22.04
-Neues Key Pair 
-=> Public `ssh-keygen -y -f praktischePruefungKeyPair.pem > praktischePruefungKeyPair-Public.pub` in InitFile integrieren
-Neue security group SSH, HTTP, HTTPS
+Konfiguriert wurde folgendes
+
+1. Ubuntu 22.04
+2. Neues Key Pair 
+3. Neue Security group
+4. Selektieren der IAM 
+5. Hochladen des Cloud-Init
+
+Ubuntu 22 wird verwendet, da einige Dependencies nicht auf dem neues Ubuntu 24 funktionieren. Ein neues Schlüsselpaar wurde definiert, um die praktische Prüfung von den anderen Aufgaben zu trennen. Weiter wurde eine neue `Security Group` erstellt, welche als Outbound-Rule alles zulässt (0.0.0.0/0) und als Inbound-Rule SSH Port 22, HTTP Port 80 und HTTPS Port 443. Wir verwenden zwar kein HTTPS da wir kein SSL-Zertifikat besitzten, doch trifft man beim Zugriff auf die Webseite schneller auf den geschlossenen Port als wenn man auf den Timeout wartet...
+Sehr wichtig ist, wie bereits bei der Lambdafunktion definiert, dass auswählen einer Rolle, welche den Zugriff auf den Secrets Manager hat. Diese wurde ebenfalls im SecretsManger bei den jeweiligen Secrets angegeben und muss nun selektiert werden. Die EC2 Instanz läuft anschliessend mit dieser Rolle und erlaubt das auslesen der Schlüsselpaare. 
+
