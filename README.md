@@ -24,15 +24,18 @@ Schliesslich sieht der Benutzer alle zwei Minuten ein neues Bild mit deren Metad
 ---
 ## Vorgehen 
 
-0. secrets manager 
-1. Mongodb erstellen (ip access beachten)
-2. S3 bucket erstellen (public access konfigurieren sodass webseite davon beziehen kann)
-3. lambda layer erstellen (beinhaltet axios, mongodb => dependencies für lambda)
-4. lambda funktion erstellen (node 20.x)
-5. ec2 webserver erstellen und dynamisch inhalt von s3 und mongodb laden
-6. EventBridge trigger alle 2 minuten
-7. load balancer
-8. hosted zone (subdomain)  
+Für die Durchführung dieser Aufgabe wir folgend fortgefahren:
+
+1. secrets manager (wird während Bearbeitung der Aufgabe ständig aktualisiert)
+2. Mongodb erstellen (ip access beachten)
+3. S3 bucket erstellen (public access konfigurieren sodass webseite davon beziehen kann)
+4. lambda layer erstellen (beinhaltet axios, mongodb => dependencies für lambda)
+5. lambda funktion erstellen (node 20.x)
+6. ec2 webserver erstellen und dynamisch inhalt von s3 und mongodb laden
+7. EventBridge trigger alle 2 minuten
+8. load balancer
+9. Auto scaling Service (für Redundanz)
+9. hosted zone (subdomain)  
 
 ## AWS Secrets Manager
 
@@ -86,6 +89,7 @@ UNSPLASH_ACCESS_KEY
     </figure>
 </div>
 
+Abschliessend erlaubt es der Secrets Manager einfach und konsequent Anmeldeinformationen zu speichern. Der Vorteil dieses Services ist es, dass er vollumfänglich von den anderen Services (Lambda, EC2) unterstütz wird und ein (mehr oder weniger) einfaches auslesen ermöglicht. Des weiteren können für den produktiven Betrieb Rollen und Berechtigungen spezifisch gesetzt werden, um die Sicherheit zu erhöhen. 
 
 ## Mongodb 
 
@@ -98,6 +102,8 @@ Bei der MongoDB gibt es nicht viel zu beachten. Nebst einer leeren Instanz musst
     </figure>
 </div>
 
+Als Alternative zur gewählten MongoDB wären alle anderen NoSQL Datenbanken in Frage gekommen, da die Anforderung vorsieht, dass Metadaten einfach erweitert werden können. Dies lässt sich mit NoSQL Datenbanken umsetzten da diese keinen strenen Bedingungen folgen. Die womöglich optimalse Technologie wäre aber AWS' DynamoDB. Dies ist eine hauseigene NoSQL Datenbank von AWS und integriert dementsprechend sehr gut mit den anderen von AWS gebrauchten services. Trotzdem ist der Zugriff zur MongoDB einfach und benötigt im Prinzip nur die API. Da wir in Aufgabe 6 bereits mit MongoDB gearbeitet haben, ist es trivial, diese bereits implementierte Technologie wiederzuverwerten. 
+
 ## S3 Bucket
 
 Der Bucket muss so konfiguriert werden, dass er erlaubt, Bilder im Internet öffentlich zu machen. Entweder kann man Global festlegen, dass jedes Bild publiziert wird oder man entscheidet sich jeweils genau, welches öffentlich gemacht werden soll. Ich habe mich für letzteres entschieden, um mehr Kontrolle über die Inhalte zu haben. Ich möchte z.B. nicht ein persönliches Bild hochladen und dieses automatisch online haben...
@@ -109,6 +115,9 @@ Damit dies bewerkstelligt werden konnte, mussten die ACLs aktiviert werden und `
         <figcaption>Einstellungen des S3 Buckets</figcaption>
     </figure>
 </div>
+
+Für das speichern des Bildes gibt es genügend Alternativen welche alle vor- oder nachteile haben. So wäre es möglich gewesen, ein AWS Elastic File System zu erstellen. Dies ist ein Datenspeicher der zwischen EC2 Instanzen geteilt wird und ebenfalls Daten persistent speichert. Vorteil dabei ist, dass es womöglich einfacher ist, die Bilder herunterzuladen und wieder zu holen, es wäre somit auch gleich möglich auf die Lambdafunktion zu verzichten und alles über eine EC2 Instanz laufen zu lassen. Auch hier, es ist für die anfängliche Entwicklung etwa einfacher doch macht es das Prinzip von Microservices und deren Modularität zu nichte. Daher habe ich mich für die Konventionelle Art - mit S3 Bucket, Lambdafunktio und EC2 Instanz entschieden.
+
 
 ## Lambda  
 
@@ -187,7 +196,7 @@ Bevor fortgefahren wird mit der EC2 Instanz welche den Webserver zur Verfügung 
 
 <div style="text-align: center;">
     <figure>
-        <img src="assets/MongoDB_testMetadata.png.png" alt="Stored metadata in MongoDB" width="500">
+        <img src="assets/MongoDB_testMetadata.png" alt="Stored metadata in MongoDB" width="500">
         <figcaption>Erster Eintrag von Metadaten in der MongoDB</figcaption>
     </figure>
 </div>
@@ -219,11 +228,10 @@ Der Webserver läuft nachher mithile von Apache und zeigt mithilfe eines PHP Scr
 Bei der Konfiguration der EC2 Instanz hatte ich am meisten Probleme. Grund dafür war das mühsame auslesen der Secrets aus dem Secrets Manager. Folgende Varianten habe ich ausprobiert:
 
 1. Aus dem MongoAPI Call die Credentials vom Secrets Manager auslesen und so Anfrage senden => Garantiert immer aktuelle Secrets, wird alle zwei Minuten per Cron Job aufgerufen
-2. Secrets per Cron Job aufrufen und als ENV speichern. MongoAPI Call greift diese ENV zu und ruft als CronJob alle zwei Minuten API ab
-3. Script ausführen welches Secrets aus SecretsManger liest und im gleichen Script den API Call mit den Variablen macht, Script als Cronjob
-4. Script ausführen welches Secrets aus SecretsManger liest und im gleichen Script den API Call mit den Variablen macht
+2. Secrets per Cron Job aufrufen und als ENV speichern. MongoAPI Call greift diese ENV zu und ruft als CronJob alle zwei Minuten API ab. Es muss geschaut werden, dass die Credentials immer aktuell sind. Bspws. mit einem Cronjob.
+3. Script ausführen welches Secrets aus SecretsManger liest und im gleichen Script den API Call mit den Variablen macht, Script als Cronjob.
 
-Hierbei hat einzig und allein die Letzte und meines Erachtens schlechteste Methode funktioniert. So wie es jetzt implementiert ist, wird das `Credentials.sh` skript beim erstellen der EC2 Instanz aufgerufen welches die Secrets aus dem Secrets Manager holt und diese als ENV auf dem System speichert. Im gleichen Atemzug wird der API Call initialsiert welcher jede Minute (nicht alle zwei um immer auf dem Stand des S3 Buckets/MongoDB zu sein) die Metadaten aus der MongoDB holt und diese in einer Datei ablegt. Hier sind schon das erste Problem; werden die Secrets geändert, werden diese nicht automatisch übernommen. Es geschieht kein neuer Abruf der Variablen. Bis hierhin geht es nur um das holen und speichern der Metadaten. Angezeigt werden diese durch das PHP Skript. Aus dem S3 Bucket wird das Bild geholt und aus dem Metadatenfile werden die enstprechenden Bildinformationen geholt. Der Connectionstring für den S3 Bucket muss ich hierbei hardcodieren da ich keine Möglichkeit gefunden habe auf den Secret Manager oder den ENV Variablen zuzugreifen. Damit die aktualisierten Daten angezeigt werden, wird die Seite jede Minute neu geladen. 
+Hierbei hat einzig und allein die Letzte und meines Erachtens schlechteste Methode funktioniert. So wie es jetzt implementiert ist, wird das `Credentials.sh` skript beim erstellen der EC2 Instanz aufgerufen welches die Secrets aus dem Secrets Manager holt und diese als ENV auf dem System speichert. Im gleichen Atemzug wird der API Call initialsiert welcher jede Minute (nicht alle zwei um immer auf dem Stand des S3 Buckets/MongoDB zu sein) die Metadaten aus der MongoDB holt und diese in einer Datei ablegt. Hier ist schon das erste Problem; werden die Secrets geändert, werden diese nicht automatisch übernommen. Es geschieht kein neuer Abruf der Variablen. Bis hierhin geht es nur um das holen und speichern der Metadaten. Angezeigt werden diese durch das PHP Skript. Aus dem S3 Bucket wird das Bild geholt und aus dem Metadatenfile werden die enstprechenden Bildinformationen geholt. Der Connectionstring für den S3 Bucket muss ich hierbei hardcodieren da ich keine Möglichkeit gefunden habe auf den Secret Manager oder den ENV Variablen zuzugreifen. Damit die aktualisierten Daten angezeigt werden, wird die Seite jede Minute neu geladen. 
 
 Somit funktioniert dieses Cloud-Init Skript doch ist es bestimmt nicht produktiv einsetzbar. Vor allem die Credentials sind hier die grösste Hürde. Diese müssen stets aktuell und sicher aufbewart werden. Nichtsdestotrotz war es möglich die Credentials aus dem Secrets Manager auszulesen und zu verwenden. 
 
@@ -330,25 +338,20 @@ Dafür muss zuerst eine Hosted Zone erstellt werden.
 
 1. Route 53
 2. Create hosted zone
-3. domain angeben `m346.ch`
-4. create record
-5. subdomain angeben `sebastian.m346.ch`
-6. CNAME da der load balancer keine öffentliche IP hat. Würde eine EC2 Instanz gewählt werden, welche eine öffentliche IP besitzt, wäre es möglich einen A-Record zu nehmen und auf die IP zu zeigen. 
-7. Dem Adminsistrator der Domain muss der Nameserver (NS) welcher auf der Route 53 Oberfläche ersichtlich ist, mitgeteilt werden. Daraufhin delegiert der Adminstrator alle Verbindung auf die Subdomain auf unsere Hosted Zone,sodass wir diese weiter verwenden können. 
+3. Subdomain angeben `sebastian.m346.ch`
+4. Dem Adminsistrator der Domain muss den Nameserver (NS) welcher auf der Route 53 Oberfläche ersichtlich ist, mitgeteilt werden. Daraufhin delegiert der Adminstrator alle Verbindung auf die Subdomain auf unsere Hosted Zone,sodass wir diese weiter verwenden können. 
+5. create record
+6. Alias Definieren: AWS erlaubt es, einen AWS Service auszuwählen und für uns automatisch zu konfigurieren. Somit wird der Load Balancer ausgewählt.
 
 <div style="text-align: center;">
     <figure>
-        <img src="assets/HZ_create_zone.png" alt="Configuration of Hosted Zone" width="500">
-        <figcaption>Konfiguration der Hosted Zone</figcaption>
+        <img src="assets/HZ_Alias.png" alt="Configuration of Hosted Zone" width="500">
+        <figcaption>Konfiguration der Subodmain in der Hosted Zone</figcaption>
     </figure>
 </div>
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/HZ_CreateRecord.png" alt="Creating the Subdomain in the Hosted Zone" width="500">
-        <figcaption>Hinzufügen der Subdomain in der Hosted Zone</figcaption>
-    </figure>
-</div>
+Hat alles funktioniert, ist unser Webserver über die Seite `sebastian.m346.ch` aufrufbar. 
 
 # Reflexion und Abschluss
 
+Die Aufgabe erwies sich als komplexer als anfangs gedacht. 
