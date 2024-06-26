@@ -60,7 +60,7 @@ write_files:
       * * * * * root mongosh "mongodb+srv://$MONGODB_USERNAME:$MONGODB_PASSWORD@$MONGODB_CLUSTER.tfgnmjn.mongodb.net/$MONGODB_DATABASE_NAME?retryWrites=true&w=majority&appName=$MONGODB_COLLECTION_NAME" --apiVersion 1 --username "$MONGODB_USERNAME" --password "$MONGODB_PASSWORD" --eval 'const metadata = db["$MONGODB_COLLECTION_NAME"].find().toArray(); print(JSON.stringify(metadata));' > /var/www/html/metadata.json
       EOF
 
-  - path: /var/www/html/info.php
+  - path: /var/www/html/index.php
     content: |
       <!DOCTYPE html>
       <html lang="en">
