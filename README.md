@@ -134,7 +134,7 @@ Das Lambda Layer stellt der zugehörigen Lambda-Funktion benötigte Dependencies
 Hier sind die Schritte dazu:
 
 1. Einen lokalen Ordner erstellen
-2. Im Ordner die Befehle npm init -y und npm install axios mongodb ausführen
+2. Im Ordner die Befehle `npm init -y` und `npm install axios mongodb` ausführen
 3. Den lokalen Ordner in eine ZIP-Datei packen
 
 Auf diese Weise werden die Dependencies/Libraries im richtigen Format vorliegen, das von Lambda gelesen werden kann.
