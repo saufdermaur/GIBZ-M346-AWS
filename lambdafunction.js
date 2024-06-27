@@ -30,29 +30,6 @@ export const handler = async (event) => {
 
     const MONGODB_URI = `mongodb+srv://${MONGODB_USERNAME_SECRET}:${MONGODB_PASSWORD_SECRET}@${MONGODB_CLUSTER_SECRET}.tfgnmjn.mongodb.net/${MONGODB_DATABASE_NAME_SECRET}?retryWrites=true&w=majority&appName=${MONGODB_COLLECTION_NAME_SECRET}`;
 
-
-    console.log(MONGODB_CLUSTER_SECRET);
-    console.log(MONGODB_PASSWORD_SECRET);
-    console.log(MONGODB_USERNAME_SECRET);
-    console.log(MONGODB_COLLECTION_NAME_SECRET);
-    console.log(MONGODB_DATABASE_NAME_SECRET);
-    console.log(S3_BUCKET_NAME_SECRET);
-    console.log(UNSPLASH_ACCESS_KEY_SECRET);
-    console.log(MONGODB_URI);
-
-
-    /*
-    const MONGODB_CLUSTER_SECRET = 'Cluster346';
-    const MONGODB_PASSWORD_SECRET = 'AbQM462RELd1wFhx';
-    const MONGODB_USERNAME_SECRET = 'saufdermaur';
-    const MONGODB_COLLECTION_NAME_SECRET = 'praktischePruefungCollection';
-    const MONGODB_DATABASE_NAME_SECRET = 'praktischePruefungDB';
-    const S3_BUCKET_NAME_SECRET = 'praktischepruefungbucket';
-    const UNSPLASH_ACCESS_KEY_SECRET = 'zHaXxy9W-Emr_Rwd-LY5sVyiqRZC746Sak9xwDF82u0';
-
-    const MONGODB_URI = 'mongodb+srv://saufdermaur:AbQM462RELd1wFhx@Cluster346.tfgnmjn.mongodb.net/praktischePruefungDB?retryWrites=true&w=majority&appName=praktischePruefungCollection';
-    */
-
     // Fetch a random photo from Unsplash
     const response = await axios.get('https://api.unsplash.com/photos/random', {
       headers: {

@@ -221,9 +221,9 @@ Der Webserver läuft mithilfe von Apache und zeigt kontinuierlich die neuen Inha
 
 Bei der Konfiguration der EC2-Instanz gab es einige Herausforderungen, insbesondere beim Auslesen der Secrets aus dem Secrets Manager. Verschiedene Ansätze wurden getestet:
 
-1. Direktes Auslesen der Credentials aus dem Secrets Manager im MongoAPI Call. Dies garantiert stets aktuelle Secrets und wird alle zwei Minuten durch einen Cron Job aktualisiert.
-2. Abrufen der Secrets per Cron Job und Speichern als Umgebungsvariablen (ENV). Der MongoAPI Call greift dann auf diese ENV zu und ruft alle zwei Minuten die API ab. Hierbei muss sichergestellt werden, dass die Credentials stets aktuell sind.
-3. Ein Skript, das die Secrets aus dem Secrets Manager liest und direkt im gleichen Skript den API Call durchführt. Dieses Skript wird als Cron Job ausgeführt.
+1. Direktes Auslesen der Credentials aus dem Secrets Manager im MongoAPI Call. Dies garantiert stets aktuelle Secrets und wird alle zwei Minuten durch einen Cron Job aktualisiert
+2. Abrufen der Secrets per Cron Job und Speichern als Umgebungsvariablen (ENV). Der MongoAPI Call greift dann auf diese ENV zu und ruft alle zwei Minuten die API ab. Hierbei muss sichergestellt werden, dass die Credentials stets aktuell sind
+3. Ein Skript, das die Secrets aus dem Secrets Manager liest und direkt im gleichen Skript den API Call durchführt. Dieses Skript wird als Cron Job ausgeführt
 
 Nur die letzte Methode hat funktioniert, wenn auch nicht optimal. Das Skript `credentials.sh` wird beim Erstellen der EC2-Instanz aufgerufen, um die Secrets aus dem Secrets Manager abzurufen und als ENV auf dem System zu speichern. Gleichzeitig wird der API Call initialisiert, der alle Minute (statt alle zwei Minuten, um immer auf dem neuesten Stand von S3 Bucket/MongoDB zu sein) die Metadaten aus der MongoDB abruft und in einer Datei speichert.
 
@@ -237,14 +237,14 @@ Da der Webserver nun funktioniert, möchten wir, dass alle zwei Minuten ein Bild
 
 Hier sind die Schritte:
 
-1. Navigiere zur Amazon EventBridge Konsole.
-2. Wähle Schedules.
-3. Klicke auf Create schedule.
-4. Unter Schedule pattern gib die Cron Expression `*/2 * * * * ?` ein, um festzulegen, dass die Regel alle zwei Minuten ausgeführt wird.
-5. Wähle als Target AWS Lambda aus.
-6. Wähle die entsprechende Lambda-Funktion aus.
-7. Wähle bei Action after schedule completion die Option NONE aus, da der Vorgang kontinuierlich laufen soll.
-8. Bei den Permissions wähle die LabRole aus, um der Regel die benötigten Berechtigungen zu geben.
+1. Navigiere zur Amazon EventBridge Konsole
+2. Wähle Schedules
+3. Klicke auf Create schedule
+4. Unter Schedule pattern gib die Cron Expression `*/2 * * * * ?` ein, um festzulegen, dass die Regel alle zwei Minuten ausgeführt wird
+5. Wähle als Target AWS Lambda aus
+6. Wähle die entsprechende Lambda-Funktion aus
+7. Wähle bei Action after schedule completion die Option NONE aus, da der Vorgang kontinuierlich laufen soll
+8. Bei den Permissions wähle die LabRole aus, um der Regel die benötigten Berechtigungen zu geben
 
 <div style="text-align: center;">
     <figure>
@@ -305,9 +305,9 @@ Der folgende Ablauf wird nicht im Detail dokumentiert, da dies bereits in der Au
 Bis zu diesem Zeitpunkt haben wir einen LoadBalancer mit einer öffentlich erreichbaren URI, doch zeigt diese auf immer die gleiche Instanz. Dies wollen wir nun ändern. 
 
 3. Erstellen eines Launch Templates:
-    2. Gehe zu EC2
-    3. Wähle Launch Templates
-    4. Konfiguriere das Launch Template ähnlich wie die zuvor erstellte EC2-Instanz
+    1. Gehe zu EC2
+    2. Wähle Launch Templates
+    3. Konfiguriere das Launch Template ähnlich wie die zuvor erstellte EC2-Instanz
 
 4. Definieren des Auto Scaling Services:
     1. Gehe zu EC2
@@ -335,7 +335,7 @@ Um den Webserver unter der Subdomain sebastian.m346.ch erreichbar zu machen, mü
 
 1. Gehe zu AWS Route 53
 2. Wähle Create hosted zone
-3. Gib die Subdomain sebastian.m346.ch an
+3. Gewünschte Subdomain angeben
 4. Der Administrator der Domain muss die Nameserver (NS), die in der Route 53 Oberfläche angezeigt werden, informiert bekommen. Der Administrator delegiert dann alle Verbindungen zur Subdomain an unsere Hosted Zone, damit wir diese verwenden können
 5. Nachdem die Hosted Zone erstellt und konfiguriert ist, erstelle einen DNS-Eintrag (record):
     1. Wähle den Typ Alias.
