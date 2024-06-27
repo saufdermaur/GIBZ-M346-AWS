@@ -364,3 +364,10 @@ Als weiteren Verbesserungspunkt sehe ich eine optimiertere Abfrage zwischen EC2 
 Den restlichen Ablauf schätze ich als erfüllt ein. Durch die Verwendung verschiedener Services entsteht eine dezentralisierte und modulare Architektur, die beliebig skaliert oder ausgetauscht werden kann, ohne grosse Unterbrüche zu erleiden. Wenn beispielsweise die EC2-Instanzen gewartet werden müssen oder ausfallen, läuft das Herunterladen und Bearbeiten der Bildinformationen trotzdem weiter, da eine Lambdafunktion benutzt wird, welche unabhängig davon arbeiten kann. Weiter ist die Lambdafunktion kostengünstiger, da sie nicht ständig läuft im Vergleich zu einer EC2-Instanz. Da der Benutzer ständig auf die Website gelangen will, kommt man nicht um einen Webserver herum, der auf einer EC2-Instanz läuft. Um Redundanz und eine mögliche Downtime zu vermeiden, wurde auch ein Auto Scaling Service und Load Balancer integriert. Somit laufen stets mindestens zwei EC2-Instanzen in verschiedenen Availability Zones. Wird eine Instanz zu stark beansprucht, leitet der Load Balancer den Verkehr zur anderen Instanz um, was zu Leistungsverbesserungen führt.
 
 Zusammenfassend bin ich also relativ zufrieden mit der Lösung. Sie weist redundante Aspekte für einen optimalen Betrieb auf und verfolgt einen modularen Ansatz. Es ist (teilweise) möglich, einen zentralisierten Credentials Manager zu verwenden, um die Anmeldeinformationen zuverlässig zu ändern, und es spart Kosten durch die Verwendung einer Lambdafunktion und einem S3 Bucket. Verbessert werden müssten jedoch die Verwaltung der Anmeldeinformationen und ein performanteres Holen und Abspeichern der Bilddateien, Metadaten sowie deren Anzeige auf der Webseite.
+
+<div style="text-align: center;">
+    <figure>
+        <img src="assets/FinishedProduct.png" alt="The overview of the product" width="500">
+        <figcaption>Das resultierte Projekt</figcaption>
+    </figure>
+</div>
