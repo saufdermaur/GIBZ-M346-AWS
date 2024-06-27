@@ -17,11 +17,10 @@ Die Logik dahinter ist allerdings einiges Komplizierter. So wurden unter anderem
 
 Prinzipiell lässt sich der ganze Vorgang in zwei Teile unterteilen; die Lambdafunktion und der Webserver. Diese umfassen die Logik für die Bildverarbeitung und deren Darstellung. Während die spezifischen Services und Funktionen zu den entsprechenden Komponenten in den folgenden Abschnitten genauer erläutert werden, folgt nun eine Übersicht wie die Applikation funktionert:
 
-In einem zwei Minuten Takt, welcher durch einen Cron-Job ausgelöst wird, wird die Lambdafunktion von Cloudwatch gestartet. Die Lambdafunktion beginnt dann, zuerst die neusten Anmeldeinformationen (Credentials) aus dem Secrets Manager zu holen. Mit der von Unsplash zur verfügung gestellten API, wird ein zufällig ausgewähltes Bild heruntergeladen im Format "regular" welches einer Breite von 1080 Pixel entspricht. Bevor das Bild aber im S3 Bucket persistent gespeichert wird, ruft die Lambdafunktion den "Rekognition" Dient auf, welcher das Bild analysiert. Als Resultat erhalten wir eine von künstlicher Intelligenz ausarbeitete Bildbeschreibung. Die 5 Merkmale mit der grössten Konfidenz sowie die Metadaten (Unsplash Id des Bildes, Beschreibung des Bildes und Benutzername des Fotografs) welche wir ebenfalls von Unsplash erhalten, werden anschliessend mithilfe der MongoAPI auf eine MongoDB geschrieben. Diese NoSQL Datenbank erlaubt es, eine freiere Wahl der Entitäten zu gewährleisten. Das heisst, die Daten folgen in der Regel keiner strengen Richtlinie, man kann also beliebige Daten speichern. Das erlaubt es uns, in Zukunft mehr oder andere Metadaten zu speichern. Ist das speichern der Metadaten erfolgreich, wird das Bild im S3 Bucket gespeichert und die Lambdafunktion wird beendet. 
+In einem zwei Minuten Takt, welcher durch einen Cron-Job ausgelöst wird, wird die Lambdafunktion von Cloudwatch gestartet. Die Lambdafunktion beginnt dann, zuerst die neusten Anmeldeinformationen (Credentials) aus dem Secrets Manager zu holen. Mit der von Unsplash zur verfügung gestellten API, wird ein zufällig ausgewähltes Bild heruntergeladen im Format "regular" welches einer Breite von 1080 Pixel entspricht. Bevor das Bild aber im S3 Bucket persistent gespeichert wird, ruft die Lambdafunktion den "Rekognition" Dient auf, welcher das Bild analysiert. Als Resultat erhalten wir eine von künstlicher Intelligenz ausarbeitete Bildbeschreibung. Die 5 Merkmale mit der grössten Konfidenz sowie die Metadaten (Unsplash Id des Bildes, Beschreibung des Bildes und Benutzername des Fotografs) welche wir ebenfalls von Unsplash erhalten, werden anschliessend mithilfe der MongoAPI auf eine MongoDB geschrieben. Diese NoSQL Datenbank erlaubt es, eine freiere Wahl der Entitäten zu gewährleisten. Das heisst, die Daten folgen in der Regel keiner strengen Richtlinie, man kann also beliebige Daten speichern. Das erlaubt es uns, in Zukunft me                                                 hr oder andere Metadaten zu speichern. Ist das Speichern der Metadaten erfolgreich, wird das Bild im S3 Bucket gespeichert und die Lambdafunktion wird beendet. 
 Der Webserver welcher auf einer EC2 Instanz läuft, bezieht sich ebnfalls die Anmeldeinformationen aus dem Secrets Manager und greift mit diesen per MongoAPI auf die MongoDB zu. Anschliessend wird im S3 Bucket nachgeschaut, ob die Bild Id welche von den Metadaten bezogen wurde, auch im S3 Bucket vorliegt, wenn ja, wird das Bild mit den entsprechenden Metadaten angezeigt. 
 Schliesslich sieht der Benutzer alle zwei Minuten ein neues Bild mit deren Metadaten auf einer Homepage. 
 
----
 ## Vorgehen 
 
 Für die Durchführung dieser Aufgabe wir folgend fortgefahren:
@@ -116,8 +115,8 @@ Damit dies bewerkstelligt werden konnte, mussten die ACLs aktiviert werden und `
     </figure>
 </div>
 
-Für das speichern des Bildes gibt es genügend Alternativen welche alle vor- oder nachteile haben. So wäre es möglich gewesen, ein AWS Elastic File System zu erstellen. Dies ist ein Datenspeicher der zwischen EC2 Instanzen geteilt wird und ebenfalls Daten persistent speichert. Vorteil dabei ist, dass es womöglich einfacher ist, die Bilder herunterzuladen und wieder zu holen, es wäre somit auch gleich möglich auf die Lambdafunktion zu verzichten und alles über eine EC2 Instanz laufen zu lassen. Auch hier, es ist für die anfängliche Entwicklung etwa einfacher doch macht es das Prinzip von Microservices und deren Modularität zu nichte. Daher habe ich mich für die Konventionelle Art - mit S3 Bucket, Lambdafunktio und EC2 Instanz entschieden.
-
+Für das speichern des Bildes gibt es genügend Alternativen welche alle vor- oder nachteile haben. So wäre es bspws. möglich gewesen, gleich MongoDB verwendet werden können. Dies hätte auch wieder die Speicherung/Abgfrage erleichtert, ist aber suboptimal, da Bilder nicht direkt im JPG oder PNG Format gespeichert werden können. Diese werden entweder als binäre Daten oder mithilfe von `GridFS` in Dokumente aufgeteilt um so gespeichert werden zu können. Nachteil ist aber eine erhöhte Latenz und somit Performance einbussen da Bilder verarbeitet werden müssen. Die womöglich sinnvollste Alternative wäre aber ein AWS Elastic File System zu erstellen. Dies ist ein Datenspeicher der zwischen EC2 Instanzen geteilt wird und ebenfalls Daten persistent speichert. Vorteil dabei ist, dass Daten einfach abrufbar sind und sogar mit Lambdafunktionen kompatibel sind. Ich habe mich aber trotzdem für den S3 Bucket entschieden, da ich einige Aufgabe mit S3 Buckets bereits gemacht habe und der S3 Bucket den Vorteil hat, dass er womöglich performanter ist, da dieser mit HTTP/S im Gegensatz zu NFS eingebunden wird, Kosten Pay as You Go berechnet werden, also je nach lese und schreib Vorgänge, während EFS 
+ Daher habe ich mich für die Konventionelle Art - mit S3 Bucket, Lambdafunktion und EC2 Instanz entschieden.$
 
 ## Lambda  
 
@@ -181,7 +180,7 @@ Unter `Layers` wird der vorherig erstellte Layer hinzugefügt. Hierbei wird das 
     </figure>
 </div>
 
-Der [Code]() wird anschliessend in das `index.mjs` geschrieben und muss mit dem Button `Deploy` gespeichert werden. 
+Der [Code](/lambdafunction.js) wird anschliessend in das `index.mjs` geschrieben und muss mit dem Button `Deploy` gespeichert werden. 
 
 Zu beachte gilt noch, dass die Timeout Dauer erhöht wird. Durch das Fetchen von Unsplash und den sonstigen Operaionen kann es sein, dass die Lambdafunktion länger als drei Sekunden daurt und in einem Timeout endet. Dies kann über Configruation => General configuration angepasst werden. Ich verwende 30s.
 
@@ -210,7 +209,7 @@ Bevor fortgefahren wird mit der EC2 Instanz welche den Webserver zur Verfügung 
 
 ## EC2 Webserver
 
-Für das erstellen der Instanz wird eine [Cloud-Init]() Datei verwendet. 
+Für das erstellen der Instanz wird eine [Cloud-Init](/cloud-init.yaml) Datei verwendet. 
 
 Konfiguriert wurde folgendes
 
