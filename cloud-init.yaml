@@ -6,10 +6,8 @@ users:
     home: /home/ubuntu
     shell: /bin/bash
     ssh_authorized_keys:
-      # Public Key Herr Gisler
-      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQC0WGP1EZykEtv5YGC9nMiPFW3U3DmZNzKFO5nEu6uozEHh4jLZzPNHSrfFTuQ2GnRDSt+XbOtTLdcj26+iPNiFoFha42aCIzYjt6V8Z+SQ9pzF4jPPzxwXfDdkEWylgoNnZ+4MG1lNFqa8aO7F62tX0Yj5khjC0Bs7Mb2cHLx1XZaxJV6qSaulDuBbLYe8QUZXkMc7wmob3PM0kflfolR3LE7LResIHWa4j4FL6r5cQmFlDU2BDPpKMFMGUfRSFiUtaWBNXFOWHQBC2+uKmuMPYP4vJC9sBgqMvPN/X2KyemqdMvdKXnCfrzadHuSSJYEzD64Cve5Zl9yVvY4AqyBD aws-key
-      # Eigener Public Key
-      - ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABAQCK45plqXW1CWEgOx8d9nGWA9MrsC+E4YRAKMt1k4LCFvbm7fXqxvCVwhFjGSaSZwrIKZ+DMFF6oLipR6jx52CRn6qcjkncLM8oorrJUKs/BM4FXToqzDRKF9kI106qTUUCZThDk/Ktr1Tqd40PVkPmGP1xs1WjkmIOdQRAPgTSDJsY8Dfv8ndiF3IGezPaXKtKrFHVW2gXFbGPkuywaCrKjV6udVx9JGCf4mOQcHCEL3M7E2aAivPdC2LwV8fhTEjzPwUQUf4ClHNhqIGvdWEgEbI9ct4RIUkKWn9Y15hwOwJz5J/VTHdj836n+n/5Tgi9UK1s0DVIycYC1qew4RcR aws-key
+      - ssh-rsa XXX aws-key
+      - ssh-rsa XXX aws-key
 ssh_pwauth: true
 disable_root: false
 package_update: true

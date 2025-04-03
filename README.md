@@ -1,6 +1,19 @@
 # Praktische Abschlussarbeit
 
-[TOC]
+- [Praktische Abschlussarbeit](#praktische-abschlussarbeit)
+  - [Projektbeschrieb](#projektbeschrieb)
+  - [Vorgehen](#vorgehen)
+  - [AWS Secrets Manager](#aws-secrets-manager)
+  - [MongoDB](#mongodb)
+  - [S3 Bucket](#s3-bucket)
+  - [Lambda](#lambda)
+    - [Lambda Layer](#lambda-layer)
+    - [Lambda Function](#lambda-function)
+  - [EC2 Webserver](#ec2-webserver)
+  - [Automatisieren mit Event Bridge](#automatisieren-mit-event-bridge)
+  - [Load Balancer und AutoScaling](#load-balancer-und-autoscaling)
+  - [Hosted Zone](#hosted-zone)
+- [Reflexion und Abschluss](#reflexion-und-abschluss)
 
 ## Projektbeschrieb
 
@@ -8,12 +21,8 @@ Die Abschlussarbeit, welche im Rahmen des Moduls 364 bearbeitet wurde, hatte das
 
 Die Logik dahinter ist allerdings einiges komplizierter. So wurden unter anderem externe Services, aber hauptsächlich AWS-spezifische Funktionalitäten, zu Gebrauch gemacht.
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/Komponentendiagramm.png" alt="Object Ownership and Public Access for Bucket" width="800">
-        <figcaption>Komponentendiagramm </figcaption>
-    </figure>
-</div>
+<img src="assets/Komponentendiagramm.png" alt="Object Ownership and Public Access for Bucket" width="800">
+<figcaption>Komponentendiagramm </figcaption>
 
 Prinzipiell lässt sich der ganze Vorgang in zwei Teile unterteilen: die Lambda-Funktion und der Webserver. Diese umfassen die Logik für die Bildverarbeitung und deren Darstellung. Während die spezifischen Services und Funktionen zu den entsprechenden Komponenten in den folgenden Abschnitten genauer erläutert werden, folgt nun eine Übersicht, wie die Applikation funktioniert:
 
@@ -21,7 +30,7 @@ In einem Zwei-Minuten-Takt, welcher durch einen Cron-Job ausgelöst wird, wird d
 Der Webserver, welcher auf einer EC2-Instanz läuft, bezieht ebenfalls die Anmeldeinformationen aus dem Secrets Manager und greift mit diesen per MongoAPI auf die MongoDB zu. Anschliessend wird im S3 Bucket nachgeschaut, ob die Bild-ID, welche von den Metadaten bezogen wurde, auch im S3 Bucket vorliegt. Wenn ja, wird das Bild mit den entsprechenden Metadaten angezeigt.
 Schliesslich sieht der Benutzer alle zwei Minuten ein neues Bild mit den dazugehörigen Metadaten auf einer Homepage.
 
-## Vorgehen 
+## Vorgehen
 
 Für die Durchführung dieser Aufgabe wird folgendermassen fortgefahren:
 
@@ -81,25 +90,17 @@ S3_BUCKET_NAME
 UNSPLASH_ACCESS_KEY
 ```
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/SecretMan_config_bucket.png" alt="Configuration for the S3 Bucket in AWS Secrets Manager" width="500">
-        <figcaption>Konfiguration des Secrets für den S3 Bucket</figcaption>
-    </figure>
-</div>
+<img src="assets/SecretMan_config_bucket.png" alt="Configuration for the S3 Bucket in AWS Secrets Manager" width="500">
+<figcaption>Konfiguration des Secrets für den S3 Bucket</figcaption>
 
 Abschliessend erlaubt es der Secrets Manager einfach und konsequent, Anmeldeinformationen zu speichern. Der Vorteil dieses Services ist, dass er vollumfänglich von den anderen Services (Lambda, EC2) unterstützt wird und ein (mehr oder weniger) einfaches Auslesen ermöglicht. Des Weiteren können für den produktiven Betrieb Rollen und Berechtigungen spezifisch gesetzt werden, um die Sicherheit zu erhöhen.
 
-## MongoDB 
+## MongoDB
 
 Bei der MongoDB gibt es nicht viel zu beachten. Nebst einer leeren Instanz musste nur noch der Network access konfiguriert werden. Dabei wurde eingestellt, dass alle IP-Adressen Zugriff auf die Datenbank haben. Natürlich werden immer noch Anmeldeinformationen verlangt, doch wird die Firewall somit etwas entschärft. Der Grund dafür ist, dass die Services, die die MongoDB benötigen, einer öffentlichen IP zugewiesen sind. Diese IP kann sich immer wieder ändern (wenn nicht explizit definiert), was dazu führen würde, dass bei jeder Änderung der IP-Adresse der Network Access auf die neue IP angepasst werden müsste. Dies wird mit dem Setzen des IP-Ranges 0.0.0.0/0 umgangen, birgt aber ein höheres Sicherheitsrisiko. Da es sich hierbei um keine produktive Umgebung handelt, ist dies jedoch kein Problem.
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/MongoDB_summary.png" alt="Created MongoDB" width="500">
-        <figcaption>MongoDB für die praktische Prüfung</figcaption>
-    </figure>
-</div>
+<img src="assets/MongoDB_summary.png" alt="Created MongoDB" width="500">
+<figcaption>MongoDB für die praktische Prüfung</figcaption>
 
 Als Alternative zur gewählten MongoDB wären alle anderen NoSQL-Datenbanken in Frage gekommen, da die Anforderung vorsieht, dass Metadaten einfach erweitert werden können. Dies lässt sich mit NoSQL-Datenbanken umsetzen, da diese keinen strengen Bedingungen folgen. Die möglicherweise optimale Technologie wäre jedoch AWS DynamoDB. Dies ist eine hauseigene NoSQL-Datenbank von AWS und integriert sich entsprechend gut mit den anderen von AWS gebrauchten Services. Trotzdem ist der Zugriff auf MongoDB einfach und benötigt im Prinzip nur die API. Da wir in Aufgabe 6 bereits mit MongoDB gearbeitet haben, ist es trivial, diese bereits implementierte Technologie wiederzuverwenden.
 
@@ -108,18 +109,14 @@ Als Alternative zur gewählten MongoDB wären alle anderen NoSQL-Datenbanken in 
 Der Bucket muss so konfiguriert werden, dass Bilder im Internet öffentlich zugänglich gemacht werden können. Dabei kann entweder global festgelegt werden, dass jedes Bild veröffentlicht wird, oder man entscheidet sich jeweils genau, welches öffentlich gemacht werden soll. Ich habe mich für letzteres entschieden, um mehr Kontrolle über die Inhalte zu haben. Zum Beispiel möchte ich nicht, dass ein persönliches Bild automatisch online geht...
 Damit dies bewerkstelligt werden konnte, mussten die ACLs aktiviert werden und Block all public access abgewählt werden. Diese Einstellungen erlauben es, dass Berechtigungen einzeln auf die jeweiligen Bilder gesetzt werden können. In unserem Fall bedeutet das, ein Bild öffentlich zu machen. Des Weiteren wird so ermöglicht, dass wir über die Lambda-Funktion die Berechtigungen für ein Bild setzen können.
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/S3_config.png" alt="Configuration of the S3 Bucket" width="500">
-        <figcaption>Einstellungen des S3 Buckets</figcaption>
-    </figure>
-</div>
+<img src="assets/S3_config.png" alt="Configuration of the S3 Bucket" width="500">
+<figcaption>Einstellungen des S3 Buckets</figcaption>
 
 Für das Speichern des Bildes gibt es mehrere Alternativen, die jeweils Vor- und Nachteile haben. Zum Beispiel wäre es möglich gewesen, MongoDB zu verwenden. Dies hätte die Speicherung und Abfrage vereinfacht, ist jedoch suboptimal, da Bilder nicht direkt im JPG- oder PNG-Format gespeichert werden können. Stattdessen müssten sie entweder als binäre Daten oder mithilfe von GridFS in MongoDB-Dokumente aufgeteilt werden, um gespeichert zu werden. Ein Nachteil dabei ist eine erhöhte Latenz und somit Einbussen in der Performance, da die Bilder verarbeitet werden müssen.
 Die womöglich sinnvollste Alternative wäre jedoch das Erstellen eines AWS Elastic File Systems. Dies ist ein Datenspeicher, der zwischen EC2-Instanzen geteilt wird und ebenfalls Daten persistent speichert. Ein Vorteil dabei ist, dass Daten einfach abrufbar sind und sogar mit Lambda-Funktionen kompatibel sind. Trotzdem habe ich mich für den S3 Bucket entschieden, da ich bereits einige Aufgaben mit S3 Buckets erledigt habe und dieser die Vorteile bietet, möglicherweise performanter zu sein, da er über HTTP/S anstatt über NFS eingebunden wird.
 Schlussendlich wäre es auch möglich gewesen, Elastic Block Storage zu verwenden. Dies eignet sich jedoch aufgrund von Skalierungs- und Wartungsproblemen nicht so gut wie S3. Daher habe ich mich für die konventionelle Methode entschieden - mit S3 Bucket, Lambda-Funktion und EC2-Instanz.
 
-## Lambda  
+## Lambda
 
 Nachdem die MongoDB erstellt, deren Credentials im Secrets Manager hinterlegt und der Bucket konfiguriert wurden, kann nun der zweite Teil angegangen werden: das Erstellen der Lambda-Funktion.
 
@@ -146,12 +143,8 @@ Die Einbindung in Lambda erfolgt wie folgt:
 3. Ein neues Layer erstellen ("Create layer")
 4. Das Layer konfigurieren, indem die Laufzeit angegeben wird und die ZIP-Datei hochgeladen wird
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/LambdaLayer_create.png" alt="Creation of the Lambda Layer" width="500">
-        <figcaption>Konfiguration des Lambda Layers</figcaption>
-    </figure>
-</div>
+<img src="assets/LambdaLayer_create.png" alt="Creation of the Lambda Layer" width="500">
+<figcaption>Konfiguration des Lambda Layers</figcaption>
 
 ### Lambda Function
 
@@ -163,48 +156,28 @@ Um die Lambda-Funktion zu erstellen, folge diesen Schritten:
 4. Wähle Node.js 20.x als Laufzeitumgebung aus
 5. Bei der Option Change default execution role wähle die LabRole aus
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/LambdaFunction_create.png" alt="Creation of Lambdafunction" width="500">
-        <figcaption>Einstellungen der Lambdafunktion</figcaption>
-    </figure>
-</div>
+<img src="assets/LambdaFunction_create.png" alt="Creation of Lambdafunction" width="500">
+<figcaption>Einstellungen der Lambdafunktion</figcaption>
 
 Das Auswählen der Execution Role hat zwei Gründe: Erstens kann die Funktion nur erstellt werden, wenn eine Rolle angegeben wird, die Berechtigungen hat, auf CloudWatch (Logging Service) zu schreiben. Zweitens greifen wir in der Funktion auf den API-Dienst von MongoDB zu. Dafür werden Credentials benötigt, die im Secrets Manager definiert sind. Damit diese ausgelesen werden können, haben wir bei den jeweiligen Secrets im Secrets Manager angegeben, welche Rollen Zugriff auf die Ressourcen haben. Da dies die LabRole ist, wird diese ausgewählt.
 Da die benötigten Dependencies nun vorhanden sind, wird die Lambda-Funktion erstellt, die das Bild von Unsplash herunterlädt und in den S3 Bucket speichert sowie die Metadaten in MongoDB ablegt.
 Unter Layers wird der zuvor erstellte Layer hinzugefügt. Dazu wird der ARN (eindeutige ID) des Layers verwendet, der sich in der Detailansicht des Lambda Layers befindet.
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/LambdaFunction_addLayer.png" alt="Add Layer to Function" width="500">
-        <figcaption>Konfiguration, um Layer an der Funktion anzubinden</figcaption>
-    </figure>
-</div>
+<img src="assets/LambdaFunction_addLayer.png" alt="Add Layer to Function" width="500">
+<figcaption>Konfiguration, um Layer an der Funktion anzubinden</figcaption>
 
-Der [Code](/lambdafunction.js)  wird anschliessend in die Datei index.mjs geschrieben und muss mit dem Button Deploy gespeichert werden.
+Der [Code](/lambdafunction.js) wird anschliessend in die Datei index.mjs geschrieben und muss mit dem Button Deploy gespeichert werden.
 Es ist wichtig zu beachten, dass die Timeout-Dauer erhöht werden muss. Aufgrund des Fetchens von Unsplash und anderen Operationen könnte die Lambda-Funktion länger als drei Sekunden dauern und daher einen Timeout verursachen. Dies kann unter Configuration => General configuration angepasst werden. Ich verwende eine Timeout-Dauer von 30 Sekunden.
 Bevor mit der Einrichtung der EC2-Instanz fortgefahren wird, sollte ein Test durchgeführt werden, der mit dem entsprechenden Button ausgeführt werden kann. Der Test-Event kann mit der Standardkonfiguration durchgeführt werden und benötigt lediglich einen Namen. Ein erfolgreicher Test gibt einen HTTP-Code 200 zurück. Zudem sollte ein öffentlich einsehbares Bild im Bucket vorhanden sein und in MongoDB der Metadateneintrag gemäss den Anforderungen gespeichert sein.
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/LambdaFunction_testSuccess.png" alt="Test success" width="500">
-        <figcaption>Antwort des Tests i.O.</figcaption>
-    </figure>
-</div>
+<img src="assets/LambdaFunction_testSuccess.png" alt="Test success" width="500">
+<figcaption>Antwort des Tests i.O.</figcaption>
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/MongoDB_testMetadata.png" alt="Stored metadata in MongoDB" width="500">
-        <figcaption>Erster Eintrag von Metadaten in der MongoDB</figcaption>
-    </figure>
-</div>
+<img src="assets/MongoDB_testMetadata.png" alt="Stored metadata in MongoDB" width="500">
+<figcaption>Erster Eintrag von Metadaten in der MongoDB</figcaption>
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/S3_publiTestImage.png" alt="Public available Image" width="500">
-        <figcaption>Öffentliches Bild im S3 Bucket</figcaption>
-    </figure>
-</div>
+<img src="assets/S3_publiTestImage.png" alt="Public available Image" width="500">
+<figcaption>Öffentliches Bild im S3 Bucket</figcaption>
 
 ## EC2 Webserver
 
@@ -246,12 +219,8 @@ Hier sind die Schritte:
 7. Wähle bei Action after schedule completion die Option NONE aus, da der Vorgang kontinuierlich laufen soll
 8. Bei den Permissions wähle die LabRole aus, um der Regel die benötigten Berechtigungen zu geben
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/EB_Scheduler.png" alt="EventBridge Cron Job" width="500">
-        <figcaption>Die nächsten Ausführzeiten des Events</figcaption>
-    </figure>
-</div>
+<img src="assets/EB_Scheduler.png" alt="EventBridge Cron Job" width="500">
+<figcaption>Die nächsten Ausführzeiten des Events</figcaption>
 
 ## Load Balancer und AutoScaling
 
@@ -260,76 +229,56 @@ Mit der bisher umgesetzten Applikation werden alle zwei Minuten Bilder von Unspl
 Der folgende Ablauf wird nicht im Detail dokumentiert, da dies bereits in der Aufgabe 06: Scaling ausführlicher beschrieben ist. Dennoch ist der Ablauf wie folgt:
 
 1. Erstellen der Target Group:
-    1. Gehe zu EC2
-    2. Wähle Target Groups
-    3. Klicke auf Create target group
-    4. Wähle als Target Instances
+   1. Gehe zu EC2
+   2. Wähle Target Groups
+   3. Klicke auf Create target group
+   4. Wähle als Target Instances
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/TG_ForLoadBalancer.png" alt="Configuration for Target Group" width="500">
-        <figcaption>Einstellungen der Target Group</figcaption>
-    </figure>
-</div>
+<img src="assets/TG_ForLoadBalancer.png" alt="Configuration for Target Group" width="500">
+<figcaption>Einstellungen der Target Group</figcaption>
 
 2. Konfigurieren des Load Balancers:
-    1. Gehe zu EC2
-    2. Wähle Load Balancer
-    3. Klicke auf Create Load Balancer
-    4. Wähle Application Load Balancer
-    5. Konfiguriere die Availability Zones, in denen der Load Balancer laufen soll
-    6. Passe die Security Groups entsprechend an
-    7. Wähle die zuvor erstellte Target Group aus, um die Last auf die EC2-Instanzen zu verteilen
+   1. Gehe zu EC2
+   2. Wähle Load Balancer
+   3. Klicke auf Create Load Balancer
+   4. Wähle Application Load Balancer
+   5. Konfiguriere die Availability Zones, in denen der Load Balancer laufen soll
+   6. Passe die Security Groups entsprechend an
+   7. Wähle die zuvor erstellte Target Group aus, um die Last auf die EC2-Instanzen zu verteilen
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/LB_AvailabilityZones.png" alt="Configuration for Availability Zones" width="500">
-        <figcaption>Die selektierten Availability Zones für mehr Redundanz</figcaption>
-    </figure>
-</div>
+<img src="assets/LB_AvailabilityZones.png" alt="Configuration for Availability Zones" width="500">
+<figcaption>Die selektierten Availability Zones für mehr Redundanz</figcaption>
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/LB_Summary.png" alt="Summary of Load Balancer" width="500">
-        <figcaption>Zusammenfassung des Load Balancers</figcaption>
-    </figure>
-</div>
+<img src="assets/LB_Summary.png" alt="Summary of Load Balancer" width="500">
+<figcaption>Zusammenfassung des Load Balancers</figcaption>
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/LB_WebserverAvailable.png" alt="Webserver through Load Balancer" width="500">
-        <figcaption>Erreichbar: Der Webserver via Load Balancer</figcaption>
-    </figure>
-</div>
+<img src="assets/LB_WebserverAvailable.png" alt="Webserver through Load Balancer" width="500">
+<figcaption>Erreichbar: Der Webserver via Load Balancer</figcaption>
 
-Bis zu diesem Zeitpunkt haben wir einen LoadBalancer mit einer öffentlich erreichbaren URI, doch zeigt diese auf immer die gleiche Instanz. Dies wollen wir nun ändern. 
+Bis zu diesem Zeitpunkt haben wir einen LoadBalancer mit einer öffentlich erreichbaren URI, doch zeigt diese auf immer die gleiche Instanz. Dies wollen wir nun ändern.
 
 3. Erstellen eines Launch Templates:
-    1. Gehe zu EC2
-    2. Wähle Launch Templates
-    3. Konfiguriere das Launch Template ähnlich wie die zuvor erstellte EC2-Instanz
+
+   1. Gehe zu EC2
+   2. Wähle Launch Templates
+   3. Konfiguriere das Launch Template ähnlich wie die zuvor erstellte EC2-Instanz
 
 4. Definieren des Auto Scaling Services:
-    1. Gehe zu EC2
-    2. Wähle Auto Scaling Groups
-    3. Wähle das zuvor erstellte Launch Template aus
-    4. Wähle die gleichen Availability Zones wie beim Load Balancer aus
-    5. Wähle Attach to an existing load balancer
-    6. Wähle die entsprechende Target Group aus
-    7. Aktiviere die Elastic Load Balancing Gesundheitsüberprüfungen
-    8. Setze die Mindestanzahl von Instanzen auf 2
+   1. Gehe zu EC2
+   2. Wähle Auto Scaling Groups
+   3. Wähle das zuvor erstellte Launch Template aus
+   4. Wähle die gleichen Availability Zones wie beim Load Balancer aus
+   5. Wähle Attach to an existing load balancer
+   6. Wähle die entsprechende Target Group aus
+   7. Aktiviere die Elastic Load Balancing Gesundheitsüberprüfungen
+   8. Setze die Mindestanzahl von Instanzen auf 2
 
 Sobald die Instanzen den Status "Healthy" erreichen, bleibt die Webseite über die URI des Load Balancers weiterhin erreichbar. Jetzt besteht eine gewisse Redundanz mit drei Instanzen (2 vom Auto Scaler, 1 manuell erstellt). Man kann sich immer auf die beiden Instanzen des Auto Scalers verlassen, es sei denn, es gibt einen weitreichenden AWS-Systemausfall, was jedoch sehr unwahrscheinlich ist.
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/TG_RunningInstances.png" alt="Healthy Instances" width="500">
-        <figcaption>Drei gesunde Instanzen</figcaption>
-    </figure>
-</div>
+<img src="assets/TG_RunningInstances.png" alt="Healthy Instances" width="500">
+<figcaption>Drei gesunde Instanzen</figcaption>
 
-
-## Hosted Zone 
+## Hosted Zone
 
 Um den Webserver unter der Subdomain sebastian.m346.ch erreichbar zu machen, müssen wir eine Hosted Zone in AWS Route 53 erstellen und konfigurieren:
 
@@ -338,20 +287,16 @@ Um den Webserver unter der Subdomain sebastian.m346.ch erreichbar zu machen, mü
 3. Gewünschte Subdomain angeben
 4. Der Administrator der Domain muss die Nameserver (NS), die in der Route 53 Oberfläche angezeigt werden, informiert bekommen. Der Administrator delegiert dann alle Verbindungen zur Subdomain an unsere Hosted Zone, damit wir diese verwenden können
 5. Nachdem die Hosted Zone erstellt und konfiguriert ist, erstelle einen DNS-Eintrag (record):
-    1. Wähle den Typ Alias.
-    2. Wähle den AWS Service, der automatisch konfiguriert werden soll.
-    3. Wähle den Load Balancer, der mit deinem Webserver verbunden ist (praktischePruefungLB-121437075.us-east-1.elb.amazonaws.com).
+   1. Wähle den Typ Alias.
+   2. Wähle den AWS Service, der automatisch konfiguriert werden soll.
+   3. Wähle den Load Balancer, der mit deinem Webserver verbunden ist (praktischePruefungLB-121437075.us-east-1.elb.amazonaws.com).
 
 Damit wird der Load Balancer unter der Subdomain sebastian.m346.ch erreichbar sein.
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/HZ_Alias.png" alt="Configuration of Hosted Zone" width="500">
-        <figcaption>Konfiguration der Subodmain in der Hosted Zone</figcaption>
-    </figure>
-</div>
+<img src="assets/HZ_Alias.png" alt="Configuration of Hosted Zone" width="500">
+<figcaption>Konfiguration der Subodmain in der Hosted Zone</figcaption>
 
-Hat alles funktioniert, ist unser Webserver über die Seite `sebastian.m346.ch` aufrufbar. 
+Hat alles funktioniert, ist unser Webserver über die Seite `sebastian.m346.ch` aufrufbar.
 
 # Reflexion und Abschluss
 
@@ -365,9 +310,5 @@ Den restlichen Ablauf schätze ich als erfüllt ein. Durch die Verwendung versch
 
 Zusammenfassend bin ich also relativ zufrieden mit der Lösung. Sie weist redundante Aspekte für einen optimalen Betrieb auf und verfolgt einen modularen Ansatz. Es ist (teilweise) möglich, einen zentralisierten Credentials Manager zu verwenden, um die Anmeldeinformationen zuverlässig zu ändern, und es spart Kosten durch die Verwendung einer Lambdafunktion und einem S3 Bucket. Verbessert werden müssten jedoch die Verwaltung der Anmeldeinformationen und ein performanteres Holen und Abspeichern der Bilddateien, Metadaten sowie deren Anzeige auf der Webseite.
 
-<div style="text-align: center;">
-    <figure>
-        <img src="assets/FinishedProduct.png" alt="The overview of the product" width="500">
-        <figcaption>Das resultierte Projekt</figcaption>
-    </figure>
-</div>
+<img src="assets/FinishedProduct.png" alt="The overview of the product" width="500">
+<figcaption>Das resultierte Projekt</figcaption>
