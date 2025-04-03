@@ -22,6 +22,7 @@ Im Rahmen des Moduls 364 entstand eine Abschlussarbeit mit dem Ziel, eine anspre
 Hinter der scheinbar einfachen Oberfläche verbirgt sich jedoch eine komplexe Logik. Neben der Einbindung externer Dienste spielte insbesondere die Nutzung AWS-spezifischer Funktionalitäten eine zentrale Rolle.
 
 ![Komponentendiagramm](/assets/Komponentendiagramm.png)
+
 *Komponentendiagramm*
 
 Prinzipiell lässt sich der ganze Vorgang in zwei Teile unterteilen: die Lambda-Funktion und der Webserver. Diese umfassen die Logik für die Bildverarbeitung und deren Darstellung. Während die spezifischen Services und Funktionen zu den entsprechenden Komponenten in den folgenden Abschnitten genauer erläutert werden, folgt nun eine Übersicht, wie die Applikation funktioniert:
@@ -91,6 +92,7 @@ UNSPLASH_ACCESS_KEY
 ```
 
 ![Configuration for the S3 Bucket in AWS Secrets Manager](/assets/SecretMan_config_bucket.png)
+
 *Konfiguration des Secrets für den S3 Bucket*
 
 Abschliessend erlaubt es der Secrets Manager einfach und konsequent, Anmeldeinformationen zu speichern. Der Vorteil dieses Services ist, dass er vollumfänglich von den anderen Services (Lambda, EC2) unterstützt wird und ein (mehr oder weniger) einfaches Auslesen ermöglicht. Des Weiteren können für den produktiven Betrieb Rollen und Berechtigungen spezifisch gesetzt werden, um die Sicherheit zu erhöhen.
@@ -100,6 +102,7 @@ Abschliessend erlaubt es der Secrets Manager einfach und konsequent, Anmeldeinfo
 Bei der MongoDB gibt es nicht viel zu beachten. Nebst einer leeren Instanz musste nur noch der Network access konfiguriert werden. Dabei wurde eingestellt, dass alle IP-Adressen Zugriff auf die Datenbank haben. Natürlich werden immer noch Anmeldeinformationen verlangt, doch wird die Firewall somit etwas entschärft. Der Grund dafür ist, dass die Services, die die MongoDB benötigen, einer öffentlichen IP zugewiesen sind. Diese IP kann sich immer wieder ändern (wenn nicht explizit definiert), was dazu führen würde, dass bei jeder Änderung der IP-Adresse der Network Access auf die neue IP angepasst werden müsste. Dies wird mit dem Setzen des IP-Ranges 0.0.0.0/0 umgangen, birgt aber ein höheres Sicherheitsrisiko. Da es sich hierbei um keine produktive Umgebung handelt, ist dies jedoch kein Problem.
 
 ![Created MongoDB](/assets/MongoDB_summary.png)
+
 *MongoDB für die praktische Prüfung*
 
 Als Alternative zur gewählten MongoDB wären alle anderen NoSQL-Datenbanken in Frage gekommen, da die Anforderung vorsieht, dass Metadaten einfach erweitert werden können. Dies lässt sich mit NoSQL-Datenbanken umsetzen, da diese keinen strengen Bedingungen folgen. Die möglicherweise optimale Technologie wäre jedoch AWS DynamoDB. Dies ist eine hauseigene NoSQL-Datenbank von AWS und integriert sich entsprechend gut mit den anderen von AWS gebrauchten Services. Trotzdem ist der Zugriff auf MongoDB einfach und benötigt im Prinzip nur die API. Da wir in Aufgabe 6 bereits mit MongoDB gearbeitet haben, ist es trivial, diese bereits implementierte Technologie wiederzuverwenden.
@@ -110,6 +113,7 @@ Der Bucket muss so konfiguriert werden, dass Bilder im Internet öffentlich zug�
 Damit dies bewerkstelligt werden konnte, mussten die ACLs aktiviert werden und Block all public access abgewählt werden. Diese Einstellungen erlauben es, dass Berechtigungen einzeln auf die jeweiligen Bilder gesetzt werden können. In unserem Fall bedeutet das, ein Bild öffentlich zu machen. Des Weiteren wird so ermöglicht, dass wir über die Lambda-Funktion die Berechtigungen für ein Bild setzen können.
 
 ![Configuration of the S3 Bucket](/assets/S3_config.png)
+
 *Einstellungen des S3 Buckets*
 
 Für das Speichern des Bildes gibt es mehrere Alternativen, die jeweils Vor- und Nachteile haben. Zum Beispiel wäre es möglich gewesen, MongoDB zu verwenden. Dies hätte die Speicherung und Abfrage vereinfacht, ist jedoch suboptimal, da Bilder nicht direkt im JPG- oder PNG-Format gespeichert werden können. Stattdessen müssten sie entweder als binäre Daten oder mithilfe von GridFS in MongoDB-Dokumente aufgeteilt werden, um gespeichert zu werden. Ein Nachteil dabei ist eine erhöhte Latenz und somit Einbussen in der Performance, da die Bilder verarbeitet werden müssen.
@@ -144,6 +148,7 @@ Die Einbindung in Lambda erfolgt wie folgt:
 4. Das Layer konfigurieren, indem die Laufzeit angegeben wird und die ZIP-Datei hochgeladen wird
 
 ![Creation of the Lambda Layer](/assets/LambdaLayer_create.png)
+
 *Konfiguration des Lambda Layers*
 
 ### Lambda Function
@@ -157,6 +162,7 @@ Um die Lambda-Funktion zu erstellen, folge diesen Schritten:
 5. Bei der Option Change default execution role wähle die LabRole aus
 
 ![Creation of Lambdafunction](/assets/LambdaFunction_create.png)
+
 *Einstellungen der Lambdafunktion*
 
 Das Auswählen der Execution Role hat zwei Gründe: Erstens kann die Funktion nur erstellt werden, wenn eine Rolle angegeben wird, die Berechtigungen hat, auf CloudWatch (Logging Service) zu schreiben. Zweitens greifen wir in der Funktion auf den API-Dienst von MongoDB zu. Dafür werden Credentials benötigt, die im Secrets Manager definiert sind. Damit diese ausgelesen werden können, haben wir bei den jeweiligen Secrets im Secrets Manager angegeben, welche Rollen Zugriff auf die Ressourcen haben. Da dies die LabRole ist, wird diese ausgewählt.
@@ -164,6 +170,7 @@ Da die benötigten Dependencies nun vorhanden sind, wird die Lambda-Funktion ers
 Unter Layers wird der zuvor erstellte Layer hinzugefügt. Dazu wird der ARN (eindeutige ID) des Layers verwendet, der sich in der Detailansicht des Lambda Layers befindet.
 
 ![Creation of the Lambda Layer](/assets/LambdaFunction_addLayer.png)
+
 *Konfiguration, um Layer an der Funktion anzubinden*
 
 Der [Code](/lambdafunction.js) wird anschliessend in die Datei index.mjs geschrieben und muss mit dem Button Deploy gespeichert werden.
@@ -171,12 +178,15 @@ Es ist wichtig zu beachten, dass die Timeout-Dauer erhöht werden muss. Aufgrund
 Bevor mit der Einrichtung der EC2-Instanz fortgefahren wird, sollte ein Test durchgeführt werden, der mit dem entsprechenden Button ausgeführt werden kann. Der Test-Event kann mit der Standardkonfiguration durchgeführt werden und benötigt lediglich einen Namen. Ein erfolgreicher Test gibt einen HTTP-Code 200 zurück. Zudem sollte ein öffentlich einsehbares Bild im Bucket vorhanden sein und in MongoDB der Metadateneintrag gemäss den Anforderungen gespeichert sein.
 
 ![Test success](/assets/LambdaFunction_testSuccess.png)
+
 *Antwort des Tests i.O.*
 
 ![Stored metadata in MongoDB](/assets/MongoDB_testMetadata.png)
+
 *Erster Eintrag von Metadaten in der MongoDB*
 
 ![Public available Image](/assets/S3_publiTestImage.png)
+
 *Öffentliches Bild im S3 Bucket*
 
 ## EC2 Webserver
@@ -220,6 +230,7 @@ Hier sind die Schritte:
 8. Bei den Permissions wähle die LabRole aus, um der Regel die benötigten Berechtigungen zu geben
 
 ![EventBridge Cron Job](/assets/EB_Scheduler.png)
+
 *Die nächsten Ausführzeiten des Events*
 
 ## Load Balancer und AutoScaling
@@ -235,6 +246,7 @@ Der folgende Ablauf wird nicht im Detail dokumentiert, da dies bereits in der Au
    4. Wähle als Target Instances
 
 ![Configuration for Target Group](/assets/TG_ForLoadBalancer.png)
+
 *Einstellungen der Target Group*
 
 1. Konfigurieren des Load Balancers:
@@ -247,12 +259,15 @@ Der folgende Ablauf wird nicht im Detail dokumentiert, da dies bereits in der Au
    7. Wähle die zuvor erstellte Target Group aus, um die Last auf die EC2-Instanzen zu verteilen
 
 ![Configuration for Availability Zones](/assets/LB_AvailabilityZones.png)
+
 *Die selektierten Availability Zones für mehr Redundanz*
 
 ![Summary of Load Balancer](/assets/LB_Summary.png)
+
 *Zusammenfassung des Load Balancers*
 
 ![Webserver through Load Balancer](/assets/LB_WebserverAvailable.png)
+
 *Erreichbar: Der Webserver via Load Balancer*
 
 Bis zu diesem Zeitpunkt haben wir einen LoadBalancer mit einer öffentlich erreichbaren URI, doch zeigt diese auf immer die gleiche Instanz. Dies wollen wir nun ändern.
@@ -276,6 +291,7 @@ Bis zu diesem Zeitpunkt haben wir einen LoadBalancer mit einer öffentlich errei
 Sobald die Instanzen den Status "Healthy" erreichen, bleibt die Webseite über die URI des Load Balancers weiterhin erreichbar. Jetzt besteht eine gewisse Redundanz mit drei Instanzen (2 vom Auto Scaler, 1 manuell erstellt). Man kann sich immer auf die beiden Instanzen des Auto Scalers verlassen, es sei denn, es gibt einen weitreichenden AWS-Systemausfall, was jedoch sehr unwahrscheinlich ist.
 
 ![Healthy Instances](/assets/TG_RunningInstances.png)
+
 *Drei gesunde Instanzen*
 
 ## Hosted Zone
@@ -294,6 +310,7 @@ Um den Webserver unter der Subdomain sebastian.m346.ch erreichbar zu machen, mü
 Damit wird der Load Balancer unter der Subdomain sebastian.m346.ch erreichbar sein.
 
 ![Configuration of Hosted Zone](/assets/HZ_Alias.png)
+
 *Konfiguration der Subodmain in der Hosted Zone*
 
 Hat alles funktioniert, ist unser Webserver über die Seite `sebastian.m346.ch` aufrufbar.
@@ -310,5 +327,6 @@ Den restlichen Ablauf schätze ich als erfüllt ein. Durch die Verwendung versch
 
 Zusammenfassend bin ich also relativ zufrieden mit der Lösung. Sie weist redundante Aspekte für einen optimalen Betrieb auf und verfolgt einen modularen Ansatz. Es ist (teilweise) möglich, einen zentralisierten Credentials Manager zu verwenden, um die Anmeldeinformationen zuverlässig zu ändern, und es spart Kosten durch die Verwendung einer Lambdafunktion und einem S3 Bucket. Verbessert werden müssten jedoch die Verwaltung der Anmeldeinformationen und ein performanteres Holen und Abspeichern der Bilddateien, Metadaten sowie deren Anzeige auf der Webseite.
 
-![The overview of the product]("/assets/FinishedProduct.png")
+![The overview of the product](/assets/FinishedProduct.png)
+
 *Die finale Webseite*
